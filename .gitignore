@@ -1,0 +1,60 @@
+.specstory/**
+.cursorindexingignore
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+*.dat
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Circle recovery files (contains sensitive data)
+recovery/
+**/recovery/
+*.recovery
+ENTITY_SECRET_SETUP.md
+implementation.md
+recovery_file_1766942789420.dat
+WALLET_SETUP.md
+TRANSACTION_CHECKING.md
+TOKEN_TRANSFER.md
+API_SECURITY.md
+IMPLEMENTATION_STATUS.md
+AI_AGENT_IMPLEMENTATION.md
+PHASE_1_COMPLETE.md
+PHASE_2_COMPLETE.md

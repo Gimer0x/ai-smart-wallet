@@ -1,0 +1,15 @@
+Wallet 1:
+  ID: 578de0b9-b385-56a0-88b0-78507ca06d72
+  Address: 0x7269a9d754edd38427ed96e0fec6686442cb0ad2
+  Blockchain: ARC-TESTNET
+  Account Type: SCA
+  State: LIVE
+  Created: 2026-02-06T03:18:04Z
+
+Wallet 2:
+  ID: 5277a884-064e-5590-8d34-9a5efeffd3a1
+  Address: 0x9b179971d69f7d048750b2188056ba597d5d1af8
+  Blockchain: ARC-TESTNET
+  Account Type: SCA
+  State: LIVE
+  Created: 2026-02-06T03:18:04Z
