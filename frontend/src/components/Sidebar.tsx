@@ -106,7 +106,10 @@ export function Sidebar({
                       cursor: 'pointer',
                     }}
                   >
-                    {w.blockchain} · {w.address.slice(0, 6)}…{w.address.slice(-4)}
+                    <span style={{ display: 'block' }}>{w.blockchain}</span>
+                    <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.75)' }}>
+                      {w.address.slice(0, 12)}…{w.address.slice(-14)}
+                    </span>
                   </button>
                 ))}
               </div>
