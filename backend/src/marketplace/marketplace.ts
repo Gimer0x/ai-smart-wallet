@@ -1,18 +1,18 @@
 /**
  * Marketplace Logic
- * 
- * Handles e-book purchases and marketplace operations
+ *
+ * User flows: preparePurchase (create challenge) + confirmPurchase (record after user signs).
+ * Payments are sent to MARKETPLACE_WALLET_ADDRESS; that address can be a developer-controlled
+ * treasury wallet (see documentation/07_APP_WALLET_OPTIONAL.md). User wallets are 100% user-controlled.
  */
 
 import dotenv from 'dotenv';
-import { EBook, PurchaseResult } from './types';
+import { EBook } from './types';
 import { findEbookById, getEbookPrice, EBOOK_CATALOG } from './catalog';
-import * as walletManager from '../wallet/walletManager';
 
 dotenv.config();
 
-// Marketplace wallet address (where payments are sent)
-// This should be set in .env or use a default testnet address
+/** Marketplace treasury address (receives USDC from user purchases). Can be a dev-controlled wallet. */
 const MARKETPLACE_WALLET_ADDRESS = process.env.MARKETPLACE_WALLET_ADDRESS || '0x0000000000000000000000000000000000000000';
 
 /**
@@ -44,105 +44,7 @@ export function isEbookPurchased(walletId: string, ebookId: string): boolean {
  */
 export function getPurchasedEbooks(walletId: string): EBook[] {
   const purchasedIds = Array.from(purchaseHistory.get(walletId) || []);
-  return purchasedIds.map(id => findEbookById(id)).filter((ebook): ebook is EBook => ebook !== undefined);
-}
-
-/**
- * Process an e-book purchase
- * 
- * This function:
- * 1. Validates the e-book exists
- * 2. Checks the buyer's balance
- * 3. Transfers USDC to marketplace wallet
- * 4. Returns purchase confirmation
- */
-export async function processPurchase(
-  ebookId: string,
-  buyerWalletId: string,
-  tokenId: string
-): Promise<PurchaseResult> {
-  try {
-    // 1. Validate e-book exists
-    const ebook = findEbookById(ebookId);
-    if (!ebook) {
-      return {
-        success: false,
-        ebook: {} as EBook,
-        message: `E-book with ID ${ebookId} not found in the marketplace.`,
-      };
-    }
-
-    // 2. Get e-book price
-    const price = getEbookPrice(ebookId);
-    if (price === null) {
-      return {
-        success: false,
-        ebook,
-        message: `Could not retrieve price for e-book "${ebook.title}".`,
-      };
-    }
-
-    // 3. Check buyer's balance
-    const balances = await walletManager.getWalletBalance(buyerWalletId);
-    const usdcBalance = balances?.find(
-      (b: any) => b.token.id === tokenId
-    );
-
-    if (!usdcBalance) {
-      return {
-        success: false,
-        ebook,
-        message: `Token ID ${tokenId} not found in wallet balance. Please check your balance first.`,
-      };
-    }
-
-    const balanceAmount = parseFloat(usdcBalance.amount);
-    if (balanceAmount < price) {
-      return {
-        success: false,
-        ebook,
-        message: `Insufficient balance. Required: ${price} USDC, Available: ${balanceAmount} ${usdcBalance.token.symbol}`,
-      };
-    }
-
-    // 4. Transfer USDC to marketplace wallet
-    if (!MARKETPLACE_WALLET_ADDRESS || MARKETPLACE_WALLET_ADDRESS === '0x0000000000000000000000000000000000000000') {
-      return {
-        success: false,
-        ebook,
-        message: 'Marketplace wallet address not configured. Please set MARKETPLACE_WALLET_ADDRESS in .env',
-      };
-    }
-
-    const transferResult = await walletManager.transferTokens(
-      buyerWalletId,
-      tokenId,
-      MARKETPLACE_WALLET_ADDRESS,
-      price.toString(),
-      'MEDIUM' // Use medium fee level for purchases
-    );
-
-    const transactionId = transferResult?.id || 'Unknown';
-    const transactionHash = (transferResult as any)?.transactionHash || 'Pending';
-
-    // 5. Record the purchase
-    recordPurchase(buyerWalletId, ebookId);
-
-    // 6. Return purchase confirmation
-    return {
-      success: true,
-      ebook,
-      transactionId,
-      transactionHash,
-      message: `Successfully purchased "${ebook.title}" by ${ebook.author} for ${price} USDC. Transaction ID: ${transactionId}`,
-    };
-  } catch (error: any) {
-    return {
-      success: false,
-      ebook: {} as EBook,
-      message: `Purchase failed: ${error.message || 'Unknown error'}`,
-    };
-  }
+  return purchasedIds.map((id) => findEbookById(id)).filter((ebook): ebook is EBook => ebook !== undefined);
 }
 
 /**
@@ -153,4 +55,78 @@ export function getMarketplaceConfig() {
     walletAddress: MARKETPLACE_WALLET_ADDRESS,
     totalEbooks: EBOOK_CATALOG.length,
   };
+}
+
+/**
+ * Prepare purchase (user-controlled): validate e-book and balance, create transfer challenge.
+ * Returns challengeId for frontend to have user sign. Does NOT execute or record purchase.
+ */
+export interface PreparePurchaseResult {
+  success: boolean;
+  challengeId?: string;
+  ebook?: EBook;
+  amount?: number;
+  message: string;
+}
+
+export async function preparePurchase(
+  ebookId: string,
+  walletId: string,
+  userToken: string
+): Promise<PreparePurchaseResult> {
+  const circleUser = await import("../circleUser/circleUserClient");
+  const { getWalletBalance, createTransferChallenge } = circleUser;
+
+  const ebook = findEbookById(ebookId);
+  if (!ebook) {
+    return { success: false, message: `E-book with ID ${ebookId} not found.` };
+  }
+  const price = getEbookPrice(ebookId);
+  if (price === null) {
+    return { success: false, ebook, message: `Could not get price for "${ebook.title}".` };
+  }
+  if (!MARKETPLACE_WALLET_ADDRESS || MARKETPLACE_WALLET_ADDRESS === "0x0000000000000000000000000000000000000000") {
+    return { success: false, ebook, message: "Marketplace wallet not configured." };
+  }
+  const balanceRes = await getWalletBalance(userToken, walletId);
+  const usdcBalance = balanceRes.data.tokenBalances?.find(
+    (b: { token: { symbol: string } }) => b.token.symbol === "USDC" || b.token.symbol === "USDC-TESTNET"
+  );
+  if (!usdcBalance) {
+    return { success: false, ebook, message: "No USDC balance. Use check_wallet_balance to get token ID." };
+  }
+  const balanceAmount = parseFloat(usdcBalance.amount);
+  if (balanceAmount < price) {
+    return {
+      success: false,
+      ebook,
+      message: `Insufficient balance. Required: ${price} USDC, Available: ${balanceAmount} ${usdcBalance.token.symbol}`,
+    };
+  }
+  try {
+    const challenge = await createTransferChallenge(userToken, {
+      walletId,
+      tokenId: usdcBalance.token.id,
+      destinationAddress: MARKETPLACE_WALLET_ADDRESS,
+      amount: price.toString(),
+      feeLevel: "MEDIUM",
+    });
+    return {
+      success: true,
+      challengeId: challenge.data.challengeId,
+      ebook,
+      amount: price,
+      message: `Purchase prepared. User must sign in the app to complete payment of ${price} USDC for "${ebook.title}". Challenge ID: ${challenge.data.challengeId}`,
+    };
+  } catch (error: any) {
+    return { success: false, ebook, message: `Failed to prepare transfer: ${error.message || "Unknown error"}` };
+  }
+}
+
+/**
+ * Confirm purchase (record only). Call after frontend has user sign and payment is sent.
+ * Does not verify on-chain; caller is responsible for ensuring payment was completed.
+ */
+export function confirmPurchase(walletId: string, ebookId: string): void {
+  recordPurchase(walletId, ebookId);
 }

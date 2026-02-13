@@ -58,7 +58,7 @@ async function main() {
         console.log(`  ID: ${wallet.id}`);
         console.log(`  Address: ${wallet.address}`);
         console.log(`  Blockchain: ${wallet.blockchain}`);
-        console.log(`  Account Type: ${wallet.accountType}`);
+        console.log(`  Account Type: ${(wallet as { accountType?: string }).accountType ?? "N/A"}`);
         console.log(`  State: ${wallet.state}`);
         console.log(`  Created: ${wallet.createDate}`);
       });

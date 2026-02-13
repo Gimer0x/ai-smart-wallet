@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { marketplaceApi } from '../services/api';
-// import dotenv from 'dotenv';
+import { getCircleSdk, getStoredCredentials } from '../utils/circleSdk';
+
+const CIRCLE_APP_ID = import.meta.env.VITE_CIRCLE_APP_ID;
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 interface EBook {
   id: string;
@@ -21,9 +24,15 @@ export function Marketplace({ walletId }: MarketplaceProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [purchasePending, setPurchasePending] = useState<{
+    ebookId: string;
+    ebookTitle: string;
+    amount: string;
+    challengeId: string;
+  } | null>(null);
+  const [purchaseLoading, setPurchaseLoading] = useState(false);
 
-  // Get wallet ID from env or prop
-  const activeWalletId = walletId || import.meta.env.VITE_PRIMARY_WALLET_ID;
+  const activeWalletId = walletId ?? undefined;
 
   useEffect(() => {
     loadEbooks();
@@ -74,6 +83,55 @@ export function Marketplace({ walletId }: MarketplaceProps) {
     }
   };
 
+  const handleBuyClick = async (ebook: EBook) => {
+    if (!activeWalletId) {
+      setError('Select a wallet first.');
+      return;
+    }
+    try {
+      setError(null);
+      const data = await marketplaceApi.preparePurchase(ebook.id, activeWalletId);
+      setPurchasePending({
+        ebookId: ebook.id,
+        ebookTitle: ebook.title,
+        amount: data.amount,
+        challengeId: data.challengeId,
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to prepare purchase');
+    }
+  };
+
+  const handleConfirmPurchase = async () => {
+    if (!purchasePending || !activeWalletId) return;
+    const creds = getStoredCredentials();
+    if (!creds?.deviceToken || !creds?.deviceEncryptionKey || !creds?.userToken || !creds?.encryptionKey || !CIRCLE_APP_ID || !GOOGLE_CLIENT_ID) {
+      setError('Missing Circle credentials. Please sign in again.');
+      setPurchasePending(null);
+      return;
+    }
+    setPurchaseLoading(true);
+    setError(null);
+    try {
+      const sdk = getCircleSdk(CIRCLE_APP_ID, GOOGLE_CLIENT_ID, creds.deviceToken, creds.deviceEncryptionKey);
+      sdk.setAuthentication({ userToken: creds.userToken, encryptionKey: creds.encryptionKey });
+      await new Promise<void>((resolve, reject) => {
+        sdk.execute(purchasePending.challengeId, (err: unknown) => {
+          if (err) reject(new Error((err as Error).message || 'Signing failed'));
+          else resolve();
+        });
+      });
+      await marketplaceApi.confirmPurchase(activeWalletId, purchasePending.ebookId);
+      setPurchasedIds((prev) => new Set(prev).add(purchasePending.ebookId));
+      setPurchasePending(null);
+      loadPurchasedEbooks();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Purchase failed');
+    } finally {
+      setPurchaseLoading(false);
+    }
+  };
+
   const filteredEbooks = ebooks;
 
   if (loading) {
@@ -97,6 +155,51 @@ export function Marketplace({ walletId }: MarketplaceProps) {
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', width: '100%' }}>
+      {!activeWalletId && (
+        <div style={{ padding: '1rem', marginBottom: '1rem', background: 'rgba(255,200,0,0.15)', borderRadius: '8px', fontSize: '0.875rem' }}>
+          Select a wallet in the sidebar to purchase e-books.
+        </div>
+      )}
+      {purchasePending && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 2000,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '2rem',
+          }}
+        >
+          <div style={{ background: 'white', borderRadius: '12px', padding: '1.5rem', maxWidth: '400px', width: '100%' }}>
+            <h3 style={{ margin: '0 0 0.5rem 0' }}>Confirm purchase</h3>
+            <p style={{ margin: 0 }}>
+              Buy &quot;{purchasePending.ebookTitle}&quot; for {purchasePending.amount} USDC?
+            </p>
+            <p style={{ margin: '0.75rem 0 0 0', fontSize: '0.8rem', color: '#666' }}>You will be asked to sign in the app.</p>
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.25rem' }}>
+              <button
+                type="button"
+                onClick={handleConfirmPurchase}
+                disabled={purchaseLoading}
+                style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+              >
+                {purchaseLoading ? 'Opening...' : 'Sign & pay'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPurchasePending(null)}
+                disabled={purchaseLoading}
+                style={{ padding: '0.5rem 1rem', background: 'transparent', border: '1px solid #999', borderRadius: '6px', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
           <div>
@@ -275,25 +378,28 @@ export function Marketplace({ walletId }: MarketplaceProps) {
                   }}
                 >
                   <div>
-                    <div
-                      style={{
-                        fontSize: '1.25rem',
-                        fontWeight: 600,
-                        color: 'var(--primary)',
-                      }}
-                    >
+                    <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--primary)' }}>
                       {ebook.price} USDC
                     </div>
-                    <div
+                    <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', opacity: 0.6 }}>ID: {ebook.id}</div>
+                  </div>
+                  {!purchasedIds.has(ebook.id) && activeWalletId && (
+                    <button
+                      type="button"
+                      onClick={() => handleBuyClick(ebook)}
                       style={{
-                        fontSize: '0.75rem',
-                        color: 'var(--secondary)',
-                        opacity: 0.6,
+                        padding: '0.5rem 1rem',
+                        background: 'var(--primary)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '0.875rem',
+                        cursor: 'pointer',
                       }}
                     >
-                      ID: {ebook.id}
-                    </div>
-                  </div>
+                      Buy
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

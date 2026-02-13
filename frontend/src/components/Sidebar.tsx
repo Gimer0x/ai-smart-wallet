@@ -1,11 +1,16 @@
+import type { Wallet } from '../services/api';
+
 interface SidebarProps {
   isOpen: boolean;
   onNavigate: (view: string) => void;
   currentView: string;
   selectedWalletId: string | null;
+  wallets: Wallet[];
+  onSelectWallet?: (walletId: string) => void;
+  onLogout?: () => void;
 }
 
-export function Sidebar({ isOpen, onNavigate, currentView, selectedWalletId }: SidebarProps) {
+export function Sidebar({ isOpen, onNavigate, currentView, selectedWalletId, wallets, onSelectWallet, onLogout }: SidebarProps) {
   return (
     <>
       {/* Sidebar */}
@@ -102,6 +107,56 @@ export function Sidebar({ isOpen, onNavigate, currentView, selectedWalletId }: S
             >
               Wallets
             </button>
+
+            {wallets.length > 0 && (
+              <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem', paddingLeft: '0.25rem' }}>
+                  Your wallets
+                </div>
+                {wallets.slice(0, 5).map((w) => (
+                  <button
+                    key={w.id}
+                    type="button"
+                    onClick={() => onSelectWallet?.(w.id)}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      padding: '0.5rem 0.75rem',
+                      marginBottom: '0.25rem',
+                      textAlign: 'left',
+                      border: 'none',
+                      borderRadius: '6px',
+                      background: selectedWalletId === w.id ? 'rgba(255,255,255,0.15)' : 'transparent',
+                      color: 'rgba(255,255,255,0.9)',
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {w.blockchain} · {w.address.slice(0, 6)}…{w.address.slice(-4)}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {onLogout && (
+              <button
+                type="button"
+                onClick={onLogout}
+                style={{
+                  marginTop: '1.5rem',
+                  padding: '0.5rem 1rem',
+                  width: '100%',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: '8px',
+                  background: 'transparent',
+                  color: 'rgba(255,255,255,0.9)',
+                  fontSize: '0.875rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Log out
+              </button>
+            )}
 
             {selectedWalletId && (
               <>

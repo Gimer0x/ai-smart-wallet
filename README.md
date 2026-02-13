@@ -5,11 +5,11 @@ An AI-powered autonomous wallet system that uses USDC on ARC Testnet to perform 
 ## Overview
 
 This project combines:
-- **Circle Developer-Controlled Wallets** for blockchain wallet management
-- **Groq AI (Llama 3.3)** for natural language processing and decision-making
+- **Circle User-Controlled Wallets** for user sign-in and wallet operations (no Entity Secret for user flows)
+- **Optional:** One app wallet (e.g. marketplace treasury) via Circle Developer-Controlled Wallets
+- **Groq AI (Llama 3.3)** for natural language processing
 - **LangChain.js** for AI agent orchestration
-- **React + TypeScript** for the frontend interface
-- **Node.js + Express** for the backend API
+- **React + TypeScript** for the frontend; **Node.js + Express** for the backend
 
 The AI agent can:
 - ✅ Check wallet balances and transaction history
@@ -40,99 +40,36 @@ The AI agent can:
    npm run install:all
    ```
 
-## 📋 Setup Guide
+## 📋 Setup Guide (user flows)
 
-### Step 1: Circle API Configuration
+User wallets are created and controlled by users (Google sign-in + Circle). No Entity Secret or PRIMARY_WALLET_ID is required for the main app.
 
-1. **Sign up for Circle API Key:**
-   - Visit [Circle Console](https://console.circle.com/)
-   - Create an account and get your `CIRCLE_API_KEY`
+### Step 1: Backend environment
 
-2. **Generate Entity Secret:**
-   ```bash
-   cd backend
-   npm run generate:entity-secret
-   ```
-   This will output a 32-byte hex string. **Copy this value** - you'll need it in the next step.
+1. **Circle API Key:** Get `CIRCLE_API_KEY` from [Circle Console](https://console.circle.com/).
+2. **Google OAuth:** Configure `GOOGLE_CLIENT_ID` (or `GOOGLE_WEB_CLIENT_ID`) for session auth.
+3. **Groq:** Set `GROQ_API_KEY` for the AI agent.
+4. **Marketplace:** Set `MARKETPLACE_WALLET_ADDRESS` to the address that should receive USDC from purchases (can be any address you control; see [Optional: App wallet](#optional-app-wallet-marketplace-treasury) for a dedicated treasury).
 
-3. **Register Entity Secret with Circle:**
-   ```bash
-   npm run register:entity-secret
-   ```
-   This encrypts and registers your Entity Secret with Circle. Save the recovery file securely!
+Example `backend/.env`:
+```env
+CIRCLE_API_KEY=your_circle_api_key
+GOOGLE_CLIENT_ID=your_google_web_client_id
+GROQ_API_KEY=your_groq_api_key
+MARKETPLACE_WALLET_ADDRESS=0x...   # Receives purchase payments
+SESSION_SECRET=your_session_secret
+```
 
-### Step 2: Wallet Setup
+### Step 2: Frontend environment
 
-1. **Create a Wallet Set:**
-   ```bash
-   npm run create:wallet-set
-   ```
-   Or with a custom name:
-   ```bash
-   npm run create:wallet-set "My Custom Wallet Set Name"
-   ```
-   **Save the Wallet Set ID** from the output.
+Copy `frontend/env.example` to `frontend/.env` and set:
+```env
+VITE_GOOGLE_CLIENT_ID=your_google_web_client_id
+VITE_CIRCLE_APP_ID=your_circle_app_id
+VITE_API_BASE_URL=/api
+```
 
-2. **Create Wallets:**
-   ```bash
-   npm run create:wallets <wallet-set-id>
-   ```
-   This creates 2 wallets by default:
-   - **Wallet 1**: Your primary wallet (for purchases and transactions)
-   - **Wallet 2**: Marketplace wallet (receives payments from purchases)
-
-   **Save both wallet IDs and addresses** from the output.
-
-3. **Fund Your Wallets:**
-   - Visit [Circle Faucet](https://faucet.circle.com/)
-   - Select **ARC Testnet**
-   - Enter your primary wallet address
-   - Request testnet USDC
-
-### Step 3: Environment Configuration
-
-1. **Backend Configuration:**
-   ```bash
-   cd backend
-   cp .env.example .env
-   ```
-   
-   Edit `backend/.env` and add:
-   ```env
-   CIRCLE_API_KEY=your_circle_api_key_here
-   CIRCLE_ENTITY_SECRET=your_32_byte_hex_entity_secret_here
-   GROQ_API_KEY=your_groq_api_key_here
-   PRIMARY_WALLET_ID=your_primary_wallet_id_here
-   MARKETPLACE_WALLET_ADDRESS=your_marketplace_wallet_address_here
-   ```
-
-2. **Generate API Secret:**
-   ```bash
-   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-   ```
-   Add the output to both `.env` files:
-   ```env
-   # backend/.env
-   API_KEY_SECRET=generated_api_secret_here
-   
-   # frontend/.env
-   VITE_API_KEY=generated_api_secret_here
-   ```
-
-3. **Frontend Configuration:**
-   ```bash
-   cd frontend
-   cp .env.example .env
-   ```
-   
-   Edit `frontend/.env`:
-   ```env
-   VITE_API_KEY=generated_api_secret_here
-   VITE_API_BASE_URL=/api
-   VITE_PRIMARY_WALLET_ID=your_primary_wallet_id_here
-   ```
-
-### Step 4: Start the Application
+### Step 3: Start the application
 
 Run both frontend and backend simultaneously:
 ```bash
@@ -151,6 +88,57 @@ npm run dev:frontend
 The application will be available at:
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:3001
+
+### Step 4: Circle + Google OAuth (for "Create wallet" flow)
+
+If you see **"Failed to validate the idToken/ accessToken"** or **"Google sign-in was rejected by Circle"** after returning from Google:
+
+1. **Google Cloud Console** → APIs & Services → Credentials → your OAuth 2.0 Web client:
+   - **Authorized JavaScript origins:** add `http://localhost:3000` (and `http://127.0.0.1:3000` if you use it).
+   - **Authorized redirect URIs:** add `http://localhost:3000` (same as your app origin). Save.
+2. **Circle developer dashboard** (Programmable Wallets): for your App ID, ensure the same **Google OAuth client ID** and **redirect URI** (`http://localhost:3000`) are configured for social login. Circle must allow this origin and client for token validation.
+3. Wait a few minutes after changing Google/Circle settings, then try again.
+
+#### Validation checklist (use this to confirm your setup)
+
+**Google Cloud Console** (APIs & Services → Credentials → your **OAuth 2.0 Web client**):
+
+- [ ] **Authorized JavaScript origins** contains `http://localhost:3000`
+- [ ] If you open the app as `http://127.0.0.1:3000`, that origin is also in **Authorized JavaScript origins**
+- [ ] **Authorized redirect URIs** contains `http://localhost:3000` (exact match; no trailing slash unless your app uses it)
+- [ ] You clicked **Save** at the bottom of the OAuth client form
+- [ ] The **Client ID** shown here is the same as in your app (`VITE_GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_ID`), e.g. `493327240496-...apps.googleusercontent.com`
+
+**Circle developer dashboard** (Programmable Wallets → your app → Social Logins / Authentication):
+
+- [ ] **Google** is enabled for social login
+- [ ] **Client ID (Web)** is set and matches your Google OAuth Web client ID exactly (same as above)
+- [ ] **Redirect URI** (if shown) is `http://localhost:3000` or matches your app’s origin
+- [ ] The **App ID** used here is the same as in your frontend (`VITE_CIRCLE_APP_ID`), e.g. `1b41c44d-9ab7-5739-aba3-1dd16608be7f`
+
+**Cross-check:**
+
+- [ ] Google **Client ID** in Circle = Google **Client ID** in Google Cloud Console = value in your app env
+- [ ] Redirect URI / origin is `http://localhost:3000` (or your app URL) in both Google and Circle
+
+When all boxes are checked and a few minutes have passed after saving, try **Continue with Google to create wallet** again.
+
+### Login and wallet creation flow
+
+The app implements this sequence for **"Continue with Google to create wallet"**:
+
+1. **Create device token** — Done as part of the same action as "Login with Google". The frontend gets a device ID from the Circle SDK, calls the backend `POST /api/circle/device-token`, and stores the returned `deviceToken` and `deviceEncryptionKey`.
+2. **Login with Google** — Circle SDK redirects the user to Google; after sign-in, the user is redirected back to the app with tokens in the URL hash.
+3. **Initialize user** — On return, the frontend calls `POST /api/circle/initialize-user` with the Circle `userToken` and `encryptionKey`. The backend creates the Circle user and returns a `challengeId` when a new wallet must be created.
+4. **Create wallet (when necessary)** — If a `challengeId` was returned, the frontend runs the Circle SDK `execute(challengeId)` so the user completes wallet creation; then it refreshes user and wallets.
+
+So device token creation is part of the single "Login with Google" step (same button), and initialize-user runs automatically on return and triggers wallet creation when needed.
+
+### Console messages you can ignore
+
+- **"Datadog Browser SDK: Application ID is not configured, no RUM data will be collected"** — Comes from a third-party script (e.g. bundled in the Circle SDK). The app does not use Datadog; you can ignore this. No data is sent.
+- **`GET /api/auth/me` 401 (Unauthorized)** — Normal when no one is logged in; the app uses it to detect session state.
+- **Extension messages** (e.g. "SES Removing unpermitted intrinsics", "Provider initialised", "TronLink initiated") — From browser extensions, not the app.
 
 ## 💬 Using the AI Wallet Agent
 
@@ -213,8 +201,8 @@ wallet-intergrated-ai/
 │   │   ├── agent/              # AI agent (Groq + LangChain)
 │   │   ├── marketplace/        # E-book marketplace logic
 │   │   ├── routes/             # API routes
-│   │   ├── wallet/             # Circle SDK wrapper
-│   │   └── scripts/            # Setup scripts
+│   │   ├── wallet/             # Optional app wallet (Entity Secret)
+│   │   └── admin/              # App-wallet-only scripts (see docs)
 │   └── .env.example
 ├── frontend/
 │   ├── src/
@@ -234,21 +222,27 @@ wallet-intergrated-ai/
 - `npm run build` - Build both projects
 - `npm run install:all` - Install all dependencies
 
-### Backend Scripts
-- `npm run generate:entity-secret` - Generate Entity Secret
+### Backend scripts (app wallet only, optional)
+- `npm run generate:entity-secret` - Generate Entity Secret (for app/treasury wallet only)
 - `npm run register:entity-secret` - Register Entity Secret with Circle
-- `npm run create:wallet-set` - Create a new wallet set
+- `npm run create:wallet-set` - Create a wallet set
 - `npm run create:wallets <wallet-set-id>` - Create wallets
+
+See [backend/src/admin/README.md](./backend/src/admin/README.md) and [documentation/07_APP_WALLET_OPTIONAL.md](./documentation/07_APP_WALLET_OPTIONAL.md).
+
+### Optional: App wallet (marketplace treasury)
+
+If you want one developer-controlled wallet to receive marketplace payments, see **[07_APP_WALLET_OPTIONAL.md](./documentation/07_APP_WALLET_OPTIONAL.md)**. User flows do not require Entity Secret or these scripts.
 
 ## 📚 Documentation
 
-For detailed guides, see the `documentation/` folder:
-
-- **[Entity Secret Setup](./documentation/01_ENTITY_SECRET_SETUP.md)** - Complete guide for Entity Secret generation and registration
-- **[Wallet Setup](./documentation/02_WALLET_SETUP.md)** - Wallet creation on ARC Testnet
-- **[API Security](./documentation/03_API_SECURITY.md)** - API key authentication setup
-- **[Transaction Checking](./documentation/04_TRANSACTION_CHECKING.md)** - How to check and monitor transactions
-- **[Token Transfer](./documentation/05_TOKEN_TRANSFER.md)** - Token transfer operations
+- **[06 User auth and Circle proxy](./documentation/06_USER_AUTH_AND_CIRCLE_PROXY.md)** - Session auth and user-controlled wallets
+- **[07 App wallet (optional)](./documentation/07_APP_WALLET_OPTIONAL.md)** - Marketplace treasury / one app wallet
+- **[01 Entity Secret setup](./documentation/01_ENTITY_SECRET_SETUP.md)** - For app wallet only
+- **[02 Wallet setup](./documentation/02_WALLET_SETUP.md)** - For app wallet only (create wallet set/wallets)
+- **[03 API Security](./documentation/03_API_SECURITY.md)** - API authentication
+- **[04 Transaction checking](./documentation/04_TRANSACTION_CHECKING.md)** - Monitor transactions
+- **[05 Token transfer](./documentation/05_TOKEN_TRANSFER.md)** - Token transfer (app wallet)
 
 ## 🎓 Learning Resources
 

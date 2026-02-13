@@ -1,14 +1,14 @@
 /**
  * Marketplace Tools for the AI Agent
- * 
- * Tools for interacting with the e-book marketplace
+ *
+ * Browse/search/price tools are stateless. Purchase tool can use preparePurchase (user-controlled) when userToken is provided.
  */
 
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import { getAllEbooks, searchEbooks, findEbookById, getEbookPrice } from "../../marketplace/catalog";
-import { processPurchase } from "../../marketplace/marketplace";
-import * as walletManager from "../../wallet/walletManager";
+import { getWalletBalance } from "../../circleUser/circleUserClient";
+import { PENDING_ACTION_MARKER } from "../types";
 
 /**
  * Tool to browse available e-books
@@ -105,46 +105,56 @@ ID: ${ebook.id}`;
 });
 
 /**
- * Tool to purchase an e-book
+ * Create marketplace tools for user-controlled flow: purchase_ebook validates and returns a pending action; user signs in the app.
  */
-export const purchaseEbookTool = new DynamicStructuredTool({
-  name: "purchase_ebook",
-  description: "Purchase an e-book by transferring USDC to the marketplace. Requires wallet ID, e-book ID, and token ID (from balance check). Always check balance first to get the token ID.",
-  schema: z.object({
-    walletId: z.string().describe("The wallet ID to use for payment"),
-    ebookId: z.union([z.string(), z.number()]).describe("The e-book ID to purchase (can be a string like '18' or number like 18)"),
-    tokenId: z.string().describe("The token ID for USDC (get this from check_wallet_balance tool)"),
-  }),
-  func: async ({ walletId, ebookId, tokenId }) => {
-    try {
-      // Convert to string if it's a number
-      const ebookIdStr = String(ebookId);
-      
-      // Process the purchase
-      const result = await processPurchase(ebookIdStr, walletId, tokenId);
-      
-      if (!result.success) {
-        return result.message;
+export function createMarketplaceTools(userToken: string) {
+  const purchaseEbookUserTool = new DynamicStructuredTool({
+    name: "purchase_ebook",
+    description: "Prepare purchase of an e-book. Validates price and balance; returns a pending action so the user can sign in the app. Does not execute until the user signs.",
+    schema: z.object({
+      walletId: z.string().describe("The wallet ID to use for payment"),
+      ebookId: z.union([z.string(), z.number()]).describe("The e-book ID to purchase"),
+      tokenId: z.string().optional().describe("Optional token ID for USDC (from check_wallet_balance); will be resolved if omitted"),
+    }),
+    func: async ({ walletId, ebookId }) => {
+      try {
+        const ebookIdStr = String(ebookId);
+        const ebook = findEbookById(ebookIdStr);
+        if (!ebook) {
+          return `E-book with ID "${ebookIdStr}" not found. Use browse_ebooks or search_ebooks to find available e-books.`;
+        }
+        const price = getEbookPrice(ebookIdStr);
+        if (price === null) {
+          return `Could not retrieve price for e-book "${ebook.title}".`;
+        }
+        const res = await getWalletBalance(userToken, walletId);
+        const usdcBalance = res.data.tokenBalances?.find(
+          (b: { token: { symbol: string } }) => b.token.symbol === "USDC" || b.token.symbol === "USDC-TESTNET"
+        );
+        if (!usdcBalance) {
+          return `No USDC balance found in wallet. Use check_wallet_balance first.`;
+        }
+        const balanceAmount = parseFloat(usdcBalance.amount);
+        if (balanceAmount < price) {
+          return `Insufficient balance. Required: ${price} USDC, Available: ${usdcBalance.amount} ${usdcBalance.token.symbol}.`;
+        }
+        const pendingAction = {
+          type: "purchase" as const,
+          walletId,
+          ebookId: ebookIdStr,
+        };
+        const payload = `${PENDING_ACTION_MARKER}${JSON.stringify(pendingAction)}${PENDING_ACTION_MARKER}\n\nPurchase of "${ebook.title}" for ${price} USDC prepared. Please confirm in the app to complete.`;
+        return payload;
+      } catch (error: any) {
+        return `Error preparing purchase: ${error.message || "Unknown error"}`;
       }
+    },
+  });
 
-      // Return success message with transaction details
-      const explorerLink = result.transactionHash && result.transactionHash !== 'Pending'
-        ? `\nView on Explorer: https://testnet.arcscan.app/tx/${result.transactionHash}`
-        : '';
-
-      return `${result.message}${explorerLink}
-
-You now own "${result.ebook.title}" by ${result.ebook.author}!`;
-    } catch (error: any) {
-      return `Error purchasing e-book: ${error.message || "Unknown error"}`;
-    }
-  },
-});
-
-// Export all marketplace tools
-export const marketplaceTools = [
-  browseEbooksTool,
-  searchEbooksTool,
-  getEbookPriceTool,
-  purchaseEbookTool,
-];
+  return [
+    browseEbooksTool,
+    searchEbooksTool,
+    getEbookPriceTool,
+    purchaseEbookUserTool,
+  ];
+}

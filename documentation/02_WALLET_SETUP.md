@@ -1,13 +1,13 @@
-# Wallet Setup Guide - ARC Testnet
+# Wallet Setup Guide - ARC Testnet (app wallet only)
 
-This guide walks you through creating your first developer-controlled wallet on ARC testnet.
+This guide is for creating **one optional developer-controlled wallet** (e.g. marketplace treasury). User wallets are created by users via the app (Circle user API). See [07_APP_WALLET_OPTIONAL.md](./07_APP_WALLET_OPTIONAL.md).
 
 ## Prerequisites
 
-1. ✅ Entity Secret generated and registered (see `ENTITY_SECRET_SETUP.md`)
-2. ✅ Environment variables configured in `.env`:
+1. ✅ Entity Secret generated and registered (see [01_ENTITY_SECRET_SETUP.md](./01_ENTITY_SECRET_SETUP.md))
+2. ✅ In `backend/.env`:
    - `CIRCLE_API_KEY`
-   - `CIRCLE_ENTITY_SECRET`
+   - `CIRCLE_ENTITY_SECRET` (only for app wallet)
 
 ## Step 1: Create a Wallet Set
 

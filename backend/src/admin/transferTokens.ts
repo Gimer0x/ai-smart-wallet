@@ -102,7 +102,7 @@ async function main() {
       console.log(`   curl http://localhost:3001/api/wallets/transactions/${transactionId}\n`);
 
       // Poll for transaction completion (optional)
-      if (state === "INITIATED" || state === "PENDING") {
+      if (state === "INITIATED" || String(state) === "PENDING") {
         console.log("🔄 Polling for transaction completion (this may take a moment)...\n");
         
         let attempts = 0;

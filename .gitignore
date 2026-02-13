@@ -43,6 +43,9 @@ coverage/
 *.tmp
 *.temp
 
+# Backend persisted Circle user credentials (sensitive)
+backend/data/
+
 # Circle recovery files (contains sensitive data)
 recovery/
 **/recovery/

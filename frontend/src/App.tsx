@@ -1,12 +1,14 @@
 import { useState } from 'react';
+import { useAuth } from './context/AuthContext';
+import { LoginView } from './components/LoginView';
 import { Sidebar } from './components/Sidebar';
 import { ChatInterface } from './components/ChatInterface';
 import { DashboardView } from './components/DashboardView';
 import { Marketplace } from './components/Marketplace';
 
 function App() {
+  const { user, wallets, selectedWalletId, setSelectedWalletId, initialCheckDone, logout, refreshWallets } = useAuth();
   const [currentView, setCurrentView] = useState('chat');
-  const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const handleTransferComplete = () => {
@@ -17,6 +19,11 @@ function App() {
     setCurrentView(view);
   };
 
+  const showMainApp = initialCheckDone && user?.hasCircleUser && wallets.length > 0;
+  if (!showMainApp) {
+    return <LoginView />;
+  }
+
   return (
     <div className="app">
       <Sidebar
@@ -24,6 +31,9 @@ function App() {
         onNavigate={handleNavigate}
         currentView={currentView}
         selectedWalletId={selectedWalletId}
+        wallets={wallets}
+        onSelectWallet={setSelectedWalletId}
+        onLogout={logout}
       />
 
       <main
@@ -35,7 +45,6 @@ function App() {
           flexDirection: 'column',
         }}
       >
-        {/* Header */}
         <header
           className="app-header"
           style={{
@@ -44,10 +53,8 @@ function App() {
             borderBottom: '1px solid rgba(0,0,0,0.08)',
             zIndex: 100,
           }}
-        >
-        </header>
+        />
 
-        {/* Main Content */}
         <div
           style={{
             flex: 1,
@@ -60,9 +67,9 @@ function App() {
           }}
         >
           {currentView === 'chat' ? (
-            <ChatInterface />
+            <ChatInterface walletId={selectedWalletId ?? undefined} onPendingComplete={refreshWallets} />
           ) : currentView === 'marketplace' ? (
-            <Marketplace walletId={selectedWalletId || undefined} />
+            <Marketplace walletId={selectedWalletId ?? undefined} />
           ) : (
             <div
               style={{

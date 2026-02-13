@@ -5,9 +5,9 @@ interface TokenBalance {
   token: {
     id: string;
     symbol: string;
-    name: string;
+    name?: string;
     blockchain: string;
-    decimals: number;
+    decimals?: number;
   };
   amount: string;
 }

@@ -1,14 +1,5 @@
 import { useState, useEffect } from 'react';
-import { walletApi } from '../services/api';
-
-interface Wallet {
-  id: string;
-  address: string;
-  blockchain: string;
-  accountType: string;
-  state: string;
-  walletSetId: string;
-}
+import { walletApi, type Wallet } from '../services/api';
 
 // Wallet name mapping by address
 const WALLET_NAMES: Record<string, string> = {

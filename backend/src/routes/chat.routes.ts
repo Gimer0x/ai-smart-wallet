@@ -1,36 +1,29 @@
 /**
  * Chat API Routes
- * 
- * Handles chat interactions with the AI agent
+ *
+ * Handles chat interactions with the AI agent.
+ * Requires authenticated session; walletId must belong to current user (or use first user wallet).
  */
 
 import { Router, Request, Response } from 'express';
-import { apiKeyAuth } from '../middleware/auth';
+import { requireCircleUser } from '../middleware/requireAuth';
+import { getSession } from '../utils/getSession';
+import { listWallets } from '../circleUser/circleUserClient';
 import { processMessage } from '../agent/agent';
-import { walletTools } from '../agent/tools/wallet.tools';
-import { marketplaceTools } from '../agent/tools/marketplace.tools';
-import dotenv from 'dotenv';
-
-dotenv.config();
-
-// Primary wallet ID - Wallet for purchasing (set via PRIMARY_WALLET_ID env var)
-const PRIMARY_WALLET_ID = process.env.PRIMARY_WALLET_ID;
-
-// Secondary wallet ID - Wallet for receiving marketplace payments (optional)
-const SECONDARY_WALLET_ID = process.env.SECONDARY_WALLET_ID;
+import { createUserWalletTools } from '../agent/tools/userWallet.tools';
+import { createMarketplaceTools } from '../agent/tools/marketplace.tools';
 
 const router = Router();
 
 /**
  * POST /api/chat
- * Send a message to the AI agent
+ * Body: { message, walletId? }
+ * Resolves activeWalletId from session: body.walletId (verified) or first user wallet.
  */
-router.post('/', apiKeyAuth, async (req: Request, res: Response) => {
+router.post('/', requireCircleUser, async (req: Request, res: Response) => {
   console.log('Received request to chat endpoint:', req.body);
   try {
-    const { message, walletId } = req.body;
-    console.log('Processing message:', message);
-
+    const { message, walletId: bodyWalletId } = req.body;
     if (!message || typeof message !== 'string') {
       return res.status(400).json({
         success: false,
@@ -38,28 +31,44 @@ router.post('/', apiKeyAuth, async (req: Request, res: Response) => {
       });
     }
 
-    // Use provided walletId or default to primary wallet from env
-    const activeWalletId = walletId || PRIMARY_WALLET_ID;
-    
+    const session = getSession(req);
+    const userToken = session.circleUserToken!;
+    const list = await listWallets(userToken);
+    const wallets = list.data.wallets || [];
+    let activeWalletId: string | undefined;
+
+    if (bodyWalletId && typeof bodyWalletId === 'string') {
+      const owned = wallets.some((w) => w.id === bodyWalletId);
+      if (!owned) {
+        return res.status(403).json({
+          success: false,
+          message: 'Wallet does not belong to the current user.',
+        });
+      }
+      activeWalletId = bodyWalletId;
+    } else {
+      activeWalletId = wallets[0]?.id;
+    }
+
     if (!activeWalletId) {
-      return res.status(500).json({
+      return res.status(400).json({
         success: false,
-        message: 'PRIMARY_WALLET_ID environment variable is not set. Please configure it in your .env file.',
+        message: 'No wallet found for user. Create a wallet first (complete initialize-user and execute challenge).',
       });
     }
-    
-    // Combine all available tools
-    const allTools = [...walletTools, ...marketplaceTools];
 
-    // Process the message with the agent and tools
-    const response = await processMessage(message, activeWalletId, allTools);
-    console.log('Generated response:', response);
+    const walletTools = createUserWalletTools(userToken);
+    const marketplaceTools = createMarketplaceTools(userToken);
+    const allTools = [...walletTools, ...marketplaceTools];
+    const result = await processMessage(message, activeWalletId, allTools);
+    console.log('Generated response:', result.response, result.pendingAction ? '(with pending action)' : '');
 
     res.json({
       success: true,
       data: {
-        response,
+        response: result.response,
         timestamp: new Date().toISOString(),
+        ...(result.pendingAction && { pendingAction: result.pendingAction }),
       },
     });
   } catch (error: any) {

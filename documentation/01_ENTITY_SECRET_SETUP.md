@@ -1,8 +1,8 @@
-# Entity Secret Setup Guide
+# Entity Secret Setup Guide (app wallet only)
 
-This guide walks you through generating and registering your Entity Secret for Circle Developer-Controlled Wallets.
+This guide is for **one optional developer-controlled wallet** (e.g. marketplace treasury). User flows do **not** use Entity Secret; they use the Circle user API and session. See [07_APP_WALLET_OPTIONAL.md](./07_APP_WALLET_OPTIONAL.md).
 
-## Important Distinction
+## Important distinction
 
 **Entity Secret vs Entity Secret Ciphertext:**
 

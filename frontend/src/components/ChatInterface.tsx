@@ -1,14 +1,26 @@
 import { useState, useRef, useEffect } from 'react';
-import { chatApi } from '../services/api';
+import { chatApi, walletApi, marketplaceApi, type PendingAction } from '../services/api';
+import { getCircleSdk, getStoredCredentials } from '../utils/circleSdk';
+
+const CIRCLE_APP_ID = import.meta.env.VITE_CIRCLE_APP_ID;
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 interface Message {
   id: string;
   role: 'user' | 'agent';
   content: string;
   timestamp: Date;
+  pendingAction?: PendingAction;
+  pendingCompleted?: boolean;
 }
 
-export function ChatInterface() {
+interface ChatInterfaceProps {
+  /** Optional: use this wallet for chat; backend uses default if not provided */
+  walletId?: string;
+  onPendingComplete?: () => void;
+}
+
+export function ChatInterface({ walletId, onPendingComplete }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -19,6 +31,8 @@ export function ChatInterface() {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [signingMessageId, setSigningMessageId] = useState<string | null>(null);
+  const [signError, setSignError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -47,8 +61,7 @@ export function ChatInterface() {
 
     try {
       console.log('Sending message to API:', messageToSend);
-      // Call the chat API
-      const response = await chatApi.sendMessage(messageToSend);
+      const response = await chatApi.sendMessage(messageToSend, walletId);
       console.log('Received response from API:', response);
       
       const agentMessage: Message = {
@@ -56,6 +69,7 @@ export function ChatInterface() {
         role: 'agent',
         content: response.response,
         timestamp: new Date(),
+        ...(response.pendingAction && { pendingAction: response.pendingAction }),
       };
       setMessages((prev) => [...prev, agentMessage]);
     } catch (error: any) {
@@ -68,6 +82,51 @@ export function ChatInterface() {
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSignPendingAction = async (messageId: string, action: PendingAction) => {
+    setSignError(null);
+    const creds = getStoredCredentials();
+    if (!creds?.deviceToken || !creds?.deviceEncryptionKey || !creds?.userToken || !creds?.encryptionKey || !CIRCLE_APP_ID || !GOOGLE_CLIENT_ID) {
+      setSignError('Missing Circle credentials. Please sign in again.');
+      return;
+    }
+    setSigningMessageId(messageId);
+    try {
+      const sdk = getCircleSdk(CIRCLE_APP_ID, GOOGLE_CLIENT_ID, creds.deviceToken, creds.deviceEncryptionKey);
+      sdk.setAuthentication({ userToken: creds.userToken, encryptionKey: creds.encryptionKey });
+      if (action.type === 'transfer') {
+        const { challengeId } = await walletApi.prepareTransfer(action.walletId, {
+          tokenId: action.tokenId,
+          destinationAddress: action.destinationAddress,
+          amount: action.amount,
+          feeLevel: action.feeLevel,
+        });
+        await new Promise<void>((resolve, reject) => {
+          sdk.execute(challengeId, (err: unknown) => {
+            if (err) reject(new Error((err as Error).message || 'Signing failed'));
+            else resolve();
+          });
+        });
+      } else {
+        const data = await marketplaceApi.preparePurchase(action.ebookId, action.walletId);
+        await new Promise<void>((resolve, reject) => {
+          sdk.execute(data.challengeId, (err: unknown) => {
+            if (err) reject(new Error((err as Error).message || 'Signing failed'));
+            else resolve();
+          });
+        });
+        await marketplaceApi.confirmPurchase(action.walletId, action.ebookId);
+      }
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, pendingAction: undefined, pendingCompleted: true } : m))
+      );
+      onPendingComplete?.();
+    } catch (e) {
+      setSignError(e instanceof Error ? e.message : 'Signing failed');
+    } finally {
+      setSigningMessageId(null);
     }
   };
 
@@ -159,22 +218,64 @@ export function ChatInterface() {
                   AI
                 </div>
               )}
-              <div
-                style={{
-                  maxWidth: '85%',
-                  padding: message.role === 'user' ? '0.75rem 1rem' : '1rem 1.25rem',
-                  borderRadius: message.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                  backgroundColor: message.role === 'user' ? 'var(--primary)' : '#f8f9fa',
-                  color: message.role === 'user' ? 'white' : 'var(--secondary)',
-                  wordWrap: 'break-word',
-                  fontSize: '0.9375rem',
-                  lineHeight: '1.5',
-                  boxShadow: message.role === 'user' 
-                    ? '0 1px 2px rgba(99, 102, 241, 0.2)' 
-                    : '0 1px 2px rgba(0, 0, 0, 0.05)',
-                }}
-              >
-                <div style={{ whiteSpace: 'pre-wrap' }}>{message.content}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxWidth: '85%' }}>
+                <div
+                  style={{
+                    padding: message.role === 'user' ? '0.75rem 1rem' : '1rem 1.25rem',
+                    borderRadius: message.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                    backgroundColor: message.role === 'user' ? 'var(--primary)' : '#f8f9fa',
+                    color: message.role === 'user' ? 'white' : 'var(--secondary)',
+                    wordWrap: 'break-word',
+                    fontSize: '0.9375rem',
+                    lineHeight: '1.5',
+                    boxShadow: message.role === 'user' ? '0 1px 2px rgba(99, 102, 241, 0.2)' : '0 1px 2px rgba(0, 0, 0, 0.05)',
+                  }}
+                >
+                  <div style={{ whiteSpace: 'pre-wrap' }}>{message.content}</div>
+                </div>
+                {message.role === 'agent' && message.pendingAction && !message.pendingCompleted && (
+                  <div
+                    style={{
+                      padding: '0.75rem 1rem',
+                      borderRadius: '8px',
+                      border: '1px solid var(--primary)',
+                      background: 'rgba(99, 102, 241, 0.06)',
+                      fontSize: '0.875rem',
+                    }}
+                  >
+                    {message.pendingAction.type === 'transfer' ? (
+                      <span>
+                        Send {message.pendingAction.amount} USDC to {message.pendingAction.destinationAddress.slice(0, 10)}…
+                      </span>
+                    ) : (
+                      <span>Purchase e-book {message.pendingAction.ebookId}</span>
+                    )}
+                    <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <button
+                        type="button"
+                        disabled={signingMessageId === message.id}
+                        onClick={() => handleSignPendingAction(message.id, message.pendingAction!)}
+                        style={{
+                          padding: '0.4rem 0.75rem',
+                          background: 'var(--primary)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '0.8rem',
+                          cursor: signingMessageId === message.id ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {signingMessageId === message.id ? 'Opening…' : message.pendingAction!.type === 'transfer' ? 'Sign & send' : 'Sign & pay'}
+                      </button>
+                      {signError && signingMessageId === message.id && (
+                        <span style={{ color: '#c33', fontSize: '0.75rem' }}>{signError}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {message.role === 'agent' && message.pendingCompleted && (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 500 }}>✓ Completed</div>
+                )}
               </div>
               {message.role === 'user' && (
                 <div

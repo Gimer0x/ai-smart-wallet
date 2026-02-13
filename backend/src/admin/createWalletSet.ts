@@ -7,7 +7,7 @@
  * Usage:
  *   npm run create:wallet-set
  *   or
- *   tsx src/scripts/createWalletSet.ts
+ *   tsx src/admin/createWalletSet.ts
  */
 
 import { createWalletSet } from "../wallet/walletManager";
@@ -31,7 +31,7 @@ async function main() {
       console.log("=".repeat(60));
       console.log(`ID: ${walletSet.id}`);
       console.log(`Name: ${walletSetName}`);
-      console.log(`Custody Type: ${walletSet.custodyType}`);
+      console.log(`Custody Type: ${(walletSet as { custodyType?: string }).custodyType ?? "N/A"}`);
       console.log(`Created: ${walletSet.createDate}`);
       console.log(`Updated: ${walletSet.updateDate}`);
       console.log("=".repeat(60));
