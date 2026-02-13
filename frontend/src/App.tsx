@@ -1,16 +1,17 @@
 import { useState } from 'react';
+import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from './context/AuthContext';
 import { useHandleCircleReturn } from './components/LoginView';
-import { LoginModal } from './components/LoginModal';
 import { Sidebar } from './components/Sidebar';
 import { ChatInterface } from './components/ChatInterface';
 import { DashboardView } from './components/DashboardView';
 
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
 function App() {
-  const { user, wallets, selectedWalletId, setSelectedWalletId, initialCheckDone, loading, logout, refreshWallets, startCircleWalletCreation } = useAuth();
+  const { user, wallets, selectedWalletId, setSelectedWalletId, initialCheckDone, loading, logout, refreshWallets, startCircleWalletCreation, loginWithGoogle } = useAuth();
   const [currentView, setCurrentView] = useState('chat');
   const [refreshKey, setRefreshKey] = useState(0);
-  const [loginModalOpen, setLoginModalOpen] = useState(false);
 
   const { status: circleReturnStatus, error: circleReturnError } = useHandleCircleReturn();
 
@@ -84,7 +85,6 @@ function App() {
         user={user}
         hasWallet={!!hasWallet}
         needsWallet={!!needsWallet}
-        onLogin={() => setLoginModalOpen(true)}
         onLogout={logout}
         onCreateWallet={startCircleWalletCreation}
       />
@@ -125,43 +125,47 @@ function App() {
             ) : (
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
                 <div style={{ textAlign: 'center', color: 'var(--secondary)' }}>
-                  <p style={{ marginBottom: '1rem', fontSize: '1.125rem' }}>
-                    {user ? 'Create a wallet to start chatting with your smart wallet.' : 'Sign in to use the chat.'}
-                  </p>
-                  {user && needsWallet ? (
-                    <button
-                      type="button"
-                      onClick={startCircleWalletCreation}
-                      style={{
-                        padding: '0.75rem 1.5rem',
-                        background: 'var(--primary)',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '8px',
-                        fontSize: '1rem',
-                        fontWeight: 500,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Create wallet
-                    </button>
+                  {user ? (
+                    <>
+                      <p style={{ marginBottom: '1rem', fontSize: '1.125rem' }}>
+                        Create a wallet to start chatting with your smart wallet.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={startCircleWalletCreation}
+                        style={{
+                          padding: '0.75rem 1.5rem',
+                          background: 'var(--primary)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontSize: '1rem',
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Create wallet
+                      </button>
+                    </>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => setLoginModalOpen(true)}
-                      style={{
-                        padding: '0.75rem 1.5rem',
-                        background: 'var(--primary)',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '8px',
-                        fontSize: '1rem',
-                        fontWeight: 500,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Sign in
-                    </button>
+                    <>
+                      <p style={{ marginBottom: '1rem', fontSize: '1.125rem' }}>
+                        Sign in to use the chat.
+                      </p>
+                      {GOOGLE_CLIENT_ID ? (
+                        <div style={{ display: 'flex', justifyContent: 'center' }}>
+                          <GoogleLogin
+                            onSuccess={(res) => {
+                              if (res.credential) loginWithGoogle(res.credential);
+                            }}
+                            onError={() => {}}
+                            useOneTap={false}
+                          />
+                        </div>
+                      ) : (
+                        <p style={{ fontSize: '0.875rem', color: '#c33' }}>Set VITE_GOOGLE_CLIENT_ID for Google Sign-In.</p>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -179,8 +183,6 @@ function App() {
           )}
         </div>
       </main>
-
-      {loginModalOpen && <LoginModal onClose={() => setLoginModalOpen(false)} />}
     </div>
   );
 }

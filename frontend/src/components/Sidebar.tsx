@@ -11,7 +11,6 @@ interface SidebarProps {
   user: MeData | null;
   hasWallet: boolean;
   needsWallet: boolean;
-  onLogin?: () => void;
   onLogout?: () => void;
   onCreateWallet?: () => void;
 }
@@ -26,7 +25,6 @@ export function Sidebar({
   user,
   hasWallet,
   needsWallet,
-  onLogin,
   onLogout,
   onCreateWallet,
 }: SidebarProps) {
@@ -108,26 +106,6 @@ export function Sidebar({
                   </button>
                 ))}
               </div>
-            )}
-
-            {!user && onLogin && (
-              <button
-                type="button"
-                onClick={onLogin}
-                style={{
-                  marginTop: '1.5rem',
-                  padding: '0.5rem 1rem',
-                  width: '100%',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  borderRadius: '8px',
-                  background: 'var(--primary)',
-                  color: 'white',
-                  fontSize: '0.875rem',
-                  cursor: 'pointer',
-                }}
-              >
-                Login
-              </button>
             )}
 
             {needsWallet && user && onCreateWallet && (
