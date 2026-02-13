@@ -9,8 +9,9 @@ const CIRCLE_APP_ID = import.meta.env.VITE_CIRCLE_APP_ID;
 /**
  * Handles return from Circle/Google OAuth redirect (after step 2 "Login with Google").
  * Uses hash + stored device credentials; onLoginComplete runs step 3 (initialize user) and step 4 (create wallet when challengeId returned).
+ * Export so App can use it when Chat is the main page.
  */
-function useHandleCircleReturn() {
+export function useHandleCircleReturn() {
   const { onCircleLoginComplete, executeChallengeAndFinish } = useAuth();
   const [status, setStatus] = useState<'idle' | 'verifying' | 'challenge' | 'done' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);

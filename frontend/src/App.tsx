@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { useAuth } from './context/AuthContext';
-import { LoginView } from './components/LoginView';
+import { useHandleCircleReturn } from './components/LoginView';
+import { LoginModal } from './components/LoginModal';
 import { Sidebar } from './components/Sidebar';
 import { ChatInterface } from './components/ChatInterface';
 import { DashboardView } from './components/DashboardView';
-import { Marketplace } from './components/Marketplace';
 
 function App() {
-  const { user, wallets, selectedWalletId, setSelectedWalletId, initialCheckDone, logout, refreshWallets } = useAuth();
+  const { user, wallets, selectedWalletId, setSelectedWalletId, initialCheckDone, loading, logout, refreshWallets, startCircleWalletCreation } = useAuth();
   const [currentView, setCurrentView] = useState('chat');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
+
+  const { status: circleReturnStatus, error: circleReturnError } = useHandleCircleReturn();
 
   const handleTransferComplete = () => {
     setRefreshKey((prev) => prev + 1);
@@ -19,13 +22,58 @@ function App() {
     setCurrentView(view);
   };
 
-  const showMainApp = initialCheckDone && user?.hasCircleUser && wallets.length > 0;
-  if (!showMainApp) {
-    return <LoginView />;
+  const hasWallet = user?.hasCircleUser && wallets.length > 0;
+  const needsWallet = user && (!user.hasCircleUser || wallets.length === 0);
+
+  if (!initialCheckDone || loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--accent)' }}>
+        <div style={{ textAlign: 'center', color: 'var(--secondary)' }}>Loading...</div>
+      </div>
+    );
   }
 
   return (
     <div className="app">
+      {/* Overlay when returning from Circle/Google redirect */}
+      {(circleReturnStatus === 'verifying' || circleReturnStatus === 'challenge') && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 3000,
+            color: 'white',
+            fontSize: '1.125rem',
+          }}
+        >
+          {circleReturnStatus === 'verifying' ? 'Verifying login...' : 'Creating wallet...'}
+        </div>
+      )}
+
+      {circleReturnStatus === 'error' && circleReturnError && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 3000,
+            padding: '2rem',
+          }}
+        >
+          <div style={{ background: 'white', padding: '2rem', borderRadius: '12px', maxWidth: '400px', textAlign: 'center' }}>
+            <p style={{ color: '#c33', marginBottom: '1rem' }}>{circleReturnError}</p>
+            <a href="/" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>Back to home</a>
+          </div>
+        </div>
+      )}
+
       <Sidebar
         isOpen={true}
         onNavigate={handleNavigate}
@@ -33,7 +81,12 @@ function App() {
         selectedWalletId={selectedWalletId}
         wallets={wallets}
         onSelectWallet={setSelectedWalletId}
+        user={user}
+        hasWallet={!!hasWallet}
+        needsWallet={!!needsWallet}
+        onLogin={() => setLoginModalOpen(true)}
         onLogout={logout}
+        onCreateWallet={startCircleWalletCreation}
       />
 
       <main
@@ -67,20 +120,54 @@ function App() {
           }}
         >
           {currentView === 'chat' ? (
-            <ChatInterface walletId={selectedWalletId ?? undefined} onPendingComplete={refreshWallets} />
-          ) : currentView === 'marketplace' ? (
-            <Marketplace walletId={selectedWalletId ?? undefined} />
+            hasWallet ? (
+              <ChatInterface walletId={selectedWalletId ?? undefined} onPendingComplete={refreshWallets} />
+            ) : (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+                <div style={{ textAlign: 'center', color: 'var(--secondary)' }}>
+                  <p style={{ marginBottom: '1rem', fontSize: '1.125rem' }}>
+                    {user ? 'Create a wallet to start chatting with your smart wallet.' : 'Sign in to use the chat.'}
+                  </p>
+                  {user && needsWallet ? (
+                    <button
+                      type="button"
+                      onClick={startCircleWalletCreation}
+                      style={{
+                        padding: '0.75rem 1.5rem',
+                        background: 'var(--primary)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '1rem',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Create wallet
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setLoginModalOpen(true)}
+                      style={{
+                        padding: '0.75rem 1.5rem',
+                        background: 'var(--primary)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '1rem',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Sign in
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
           ) : (
-            <div
-              style={{
-                maxWidth: '1200px',
-                margin: '0 auto',
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '2rem',
-              }}
-            >
+            <div style={{ maxWidth: '1200px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
               <DashboardView
                 view={currentView}
                 selectedWalletId={selectedWalletId}
@@ -92,6 +179,8 @@ function App() {
           )}
         </div>
       </main>
+
+      {loginModalOpen && <LoginModal onClose={() => setLoginModalOpen(false)} />}
     </div>
   );
 }

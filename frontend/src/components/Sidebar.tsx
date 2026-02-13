@@ -1,4 +1,5 @@
 import type { Wallet } from '../services/api';
+import type { MeData } from '../services/api';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -7,13 +8,30 @@ interface SidebarProps {
   selectedWalletId: string | null;
   wallets: Wallet[];
   onSelectWallet?: (walletId: string) => void;
+  user: MeData | null;
+  hasWallet: boolean;
+  needsWallet: boolean;
+  onLogin?: () => void;
   onLogout?: () => void;
+  onCreateWallet?: () => void;
 }
 
-export function Sidebar({ isOpen, onNavigate, currentView, selectedWalletId, wallets, onSelectWallet, onLogout }: SidebarProps) {
+export function Sidebar({
+  isOpen,
+  onNavigate,
+  currentView,
+  selectedWalletId,
+  wallets,
+  onSelectWallet,
+  user,
+  hasWallet,
+  needsWallet,
+  onLogin,
+  onLogout,
+  onCreateWallet,
+}: SidebarProps) {
   return (
     <>
-      {/* Sidebar */}
       <div
         className={`sidebar ${isOpen ? 'sidebar-open' : 'sidebar-closed'}`}
         style={{
@@ -32,18 +50,12 @@ export function Sidebar({ isOpen, onNavigate, currentView, selectedWalletId, wal
         <div style={{ padding: '1.5rem' }}>
           <div style={{ marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.125rem', marginBottom: '0.5rem' }}>
-              <div style={{ fontSize: '0.875rem', color: 'white', fontWeight: 500, lineHeight: 1.4 }}>
-                Wallet
-              </div>
-              <div style={{ fontSize: '0.875rem', color: 'white', fontWeight: 500, lineHeight: 1.4 }}>
-                Integrated
-              </div>
-              <div style={{ fontSize: '0.875rem', color: 'white', fontWeight: 500, lineHeight: 1.4 }}>
-                AI
-              </div>
+              <div style={{ fontSize: '0.875rem', color: 'white', fontWeight: 500, lineHeight: 1.4 }}>Wallet</div>
+              <div style={{ fontSize: '0.875rem', color: 'white', fontWeight: 500, lineHeight: 1.4 }}>Integrated</div>
+              <div style={{ fontSize: '0.875rem', color: 'white', fontWeight: 500, lineHeight: 1.4 }}>AI</div>
             </div>
             <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', margin: '0.5rem 0 0 0', fontWeight: 400 }}>
-              {currentView === 'chat' ? 'Chat with your smart wallet' : currentView === 'marketplace' ? 'Browse e-books' : 'Dashboard'}
+              Chat with your smart wallet
             </p>
           </div>
 
@@ -66,46 +78,6 @@ export function Sidebar({ isOpen, onNavigate, currentView, selectedWalletId, wal
               }}
             >
               Chat
-            </button>
-
-            <button
-              onClick={() => onNavigate('marketplace')}
-              className={`nav-button ${currentView === 'marketplace' ? 'nav-active' : ''}`}
-              style={{
-                padding: '0.75rem 1rem',
-                background: currentView === 'marketplace' ? 'var(--primary)' : 'transparent',
-                border: 'none',
-                borderRadius: '8px',
-                color: currentView === 'marketplace' ? 'white' : 'rgba(255,255,255,0.8)',
-                textAlign: 'left',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                fontSize: '0.875rem',
-                fontWeight: currentView === 'marketplace' ? 500 : 400,
-                width: '100%',
-              }}
-            >
-              Marketplace
-            </button>
-
-            <button
-              onClick={() => onNavigate('wallets')}
-              className={`nav-button ${currentView === 'wallets' ? 'nav-active' : ''}`}
-              style={{
-                padding: '0.75rem 1rem',
-                background: currentView === 'wallets' ? 'var(--primary)' : 'transparent',
-                border: 'none',
-                borderRadius: '8px',
-                color: currentView === 'wallets' ? 'white' : 'rgba(255,255,255,0.8)',
-                textAlign: 'left',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                fontSize: '0.875rem',
-                fontWeight: currentView === 'wallets' ? 500 : 400,
-                width: '100%',
-              }}
-            >
-              Wallets
             </button>
 
             {wallets.length > 0 && (
@@ -138,7 +110,47 @@ export function Sidebar({ isOpen, onNavigate, currentView, selectedWalletId, wal
               </div>
             )}
 
-            {onLogout && (
+            {!user && onLogin && (
+              <button
+                type="button"
+                onClick={onLogin}
+                style={{
+                  marginTop: '1.5rem',
+                  padding: '0.5rem 1rem',
+                  width: '100%',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: '8px',
+                  background: 'var(--primary)',
+                  color: 'white',
+                  fontSize: '0.875rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Login
+              </button>
+            )}
+
+            {needsWallet && user && onCreateWallet && (
+              <button
+                type="button"
+                onClick={onCreateWallet}
+                style={{
+                  marginTop: '1rem',
+                  padding: '0.5rem 1rem',
+                  width: '100%',
+                  border: 'none',
+                  borderRadius: '8px',
+                  background: 'var(--primary)',
+                  color: 'white',
+                  fontSize: '0.875rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Create wallet
+              </button>
+            )}
+
+            {user && onLogout && (
               <button
                 type="button"
                 onClick={onLogout}
@@ -158,13 +170,12 @@ export function Sidebar({ isOpen, onNavigate, currentView, selectedWalletId, wal
               </button>
             )}
 
-            {selectedWalletId && (
+            {selectedWalletId && hasWallet && (
               <>
                 <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
                   <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem', paddingLeft: '1rem' }}>
                     Wallet Details
                   </div>
-                  
                   <button
                     onClick={() => onNavigate('balance')}
                     className={`nav-button ${currentView === 'balance' ? 'nav-active' : ''}`}
@@ -184,7 +195,6 @@ export function Sidebar({ isOpen, onNavigate, currentView, selectedWalletId, wal
                   >
                     Balance
                   </button>
-
                   <button
                     onClick={() => onNavigate('transactions')}
                     className={`nav-button ${currentView === 'transactions' ? 'nav-active' : ''}`}
@@ -204,7 +214,6 @@ export function Sidebar({ isOpen, onNavigate, currentView, selectedWalletId, wal
                   >
                     Transactions
                   </button>
-
                   <button
                     onClick={() => onNavigate('transfer')}
                     className={`nav-button ${currentView === 'transfer' ? 'nav-active' : ''}`}
@@ -229,7 +238,7 @@ export function Sidebar({ isOpen, onNavigate, currentView, selectedWalletId, wal
             )}
           </nav>
 
-          {selectedWalletId && (
+          {selectedWalletId && hasWallet && (
             <div style={{ marginTop: '2rem', padding: '1rem', backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: '6px', fontSize: '0.75rem' }}>
               <div style={{ color: 'rgba(255,255,255,0.7)', marginBottom: '0.5rem', fontWeight: 500 }}>Selected Wallet</div>
               <div style={{ wordBreak: 'break-all', fontSize: '0.7rem', color: 'rgba(255,255,255,0.9)' }}>{selectedWalletId.substring(0, 24)}...</div>
