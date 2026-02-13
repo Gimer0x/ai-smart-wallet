@@ -1,0 +1,10 @@
+---
+description: Rules for this project
+alwaysApply: true
+---
+
+# Agent and tool rules
+- Do not overengineer.
+- Always try to implement a simple but effective solution when possible.
+- Do not expose sensible information such as private keys, APIs keys, circle api keys or google client id. 
+- Use the .env file for sensible and private variables.
