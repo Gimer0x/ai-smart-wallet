@@ -48,13 +48,17 @@ export function Sidebar({
         <div style={{ padding: '1.5rem' }}>
           <div style={{ marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.125rem', marginBottom: '0.5rem' }}>
-              <div style={{ fontSize: '0.875rem', color: 'white', fontWeight: 500, lineHeight: 1.4 }}>Wallet</div>
-              <div style={{ fontSize: '0.875rem', color: 'white', fontWeight: 500, lineHeight: 1.4 }}>Integrated</div>
-              <div style={{ fontSize: '0.875rem', color: 'white', fontWeight: 500, lineHeight: 1.4 }}>AI</div>
+              <div style={{ fontSize: '1.0rem', color: 'white', fontWeight: 500, lineHeight: 1.4 }}>Multisig AI Wallet</div>
+              
             </div>
-            <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', margin: '0.5rem 0 0 0', fontWeight: 400 }}>
+            <p style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.7)', margin: '0.5rem 0 0 0', fontWeight: 400 }}>
               Chat with your smart wallet
             </p>
+            {user?.email && (
+              <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.6)', margin: '0.75rem 0 0 0', fontWeight: 400, wordBreak: 'break-all' }}>
+                {user.email}
+              </p>
+            )}
           </div>
 
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
