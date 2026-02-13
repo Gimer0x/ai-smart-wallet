@@ -46,16 +46,8 @@ coverage/
 # Backend persisted Circle user credentials (sensitive)
 backend/data/
 
-# Circle recovery files (contains sensitive data)
-recovery/
-**/recovery/
-*.recovery
-ENTITY_SECRET_SETUP.md
+# Misc docs (optional to ignore)
 implementation.md
-recovery_file_1766942789420.dat
-WALLET_SETUP.md
-TRANSACTION_CHECKING.md
-TOKEN_TRANSFER.md
 API_SECURITY.md
 IMPLEMENTATION_STATUS.md
 AI_AGENT_IMPLEMENTATION.md

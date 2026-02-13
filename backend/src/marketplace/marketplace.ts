@@ -2,8 +2,7 @@
  * Marketplace Logic
  *
  * User flows: preparePurchase (create challenge) + confirmPurchase (record after user signs).
- * Payments are sent to MARKETPLACE_WALLET_ADDRESS; that address can be a developer-controlled
- * treasury wallet (see documentation/07_APP_WALLET_OPTIONAL.md). User wallets are 100% user-controlled.
+ * Payments are sent to MARKETPLACE_WALLET_ADDRESS (any address you control). User wallets are 100% user-controlled.
  */
 
 import dotenv from 'dotenv';

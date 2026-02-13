@@ -7,19 +7,12 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "type-check": "tsc --noEmit",
-    "generate:entity-secret": "tsx src/admin/generateEntitySecret.ts",
-    "register:entity-secret": "tsx src/admin/registerEntitySecret.ts",
-    "create:wallet-set": "tsx src/admin/createWalletSet.ts",
-    "create:wallets": "tsx src/admin/createWallets.ts",
-    "check:transactions": "tsx src/admin/checkTransactions.ts",
-    "transfer:tokens": "tsx src/admin/transferTokens.ts"
+    "type-check": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@circle-fin/developer-controlled-wallets": "^9.6.0",
     "@langchain/core": "^1.1.8",
     "@langchain/groq": "^1.0.2",
     "cookie-parser": "^1.4.7",

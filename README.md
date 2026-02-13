@@ -5,8 +5,7 @@ An AI-powered autonomous wallet system that uses USDC on ARC Testnet to perform 
 ## Overview
 
 This project combines:
-- **Circle User-Controlled Wallets** for user sign-in and wallet operations (no Entity Secret for user flows)
-- **Optional:** One app wallet (e.g. marketplace treasury) via Circle Developer-Controlled Wallets
+- **Circle User-Controlled Wallets** for user sign-in and wallet operations
 - **Groq AI (Llama 3.3)** for natural language processing
 - **LangChain.js** for AI agent orchestration
 - **React + TypeScript** for the frontend; **Node.js + Express** for the backend
@@ -49,7 +48,7 @@ User wallets are created and controlled by users (Google sign-in + Circle). No E
 1. **Circle API Key:** Get `CIRCLE_API_KEY` from [Circle Console](https://console.circle.com/).
 2. **Google OAuth:** Configure `GOOGLE_CLIENT_ID` (or `GOOGLE_WEB_CLIENT_ID`) for session auth.
 3. **Groq:** Set `GROQ_API_KEY` for the AI agent.
-4. **Marketplace:** Set `MARKETPLACE_WALLET_ADDRESS` to the address that should receive USDC from purchases (can be any address you control; see [Optional: App wallet](#optional-app-wallet-marketplace-treasury) for a dedicated treasury).
+4. **Marketplace:** Set `MARKETPLACE_WALLET_ADDRESS` to the address that should receive USDC from purchases (any address you control).
 
 Example `backend/.env`:
 ```env
@@ -201,8 +200,7 @@ wallet-intergrated-ai/
 │   │   ├── agent/              # AI agent (Groq + LangChain)
 │   │   ├── marketplace/        # E-book marketplace logic
 │   │   ├── routes/             # API routes
-│   │   ├── wallet/             # Optional app wallet (Entity Secret)
-│   │   └── admin/              # App-wallet-only scripts (see docs)
+│   │   └── ...
 │   └── .env.example
 ├── frontend/
 │   ├── src/
@@ -222,27 +220,12 @@ wallet-intergrated-ai/
 - `npm run build` - Build both projects
 - `npm run install:all` - Install all dependencies
 
-### Backend scripts (app wallet only, optional)
-- `npm run generate:entity-secret` - Generate Entity Secret (for app/treasury wallet only)
-- `npm run register:entity-secret` - Register Entity Secret with Circle
-- `npm run create:wallet-set` - Create a wallet set
-- `npm run create:wallets <wallet-set-id>` - Create wallets
-
-See [backend/src/admin/README.md](./backend/src/admin/README.md) and [documentation/07_APP_WALLET_OPTIONAL.md](./documentation/07_APP_WALLET_OPTIONAL.md).
-
-### Optional: App wallet (marketplace treasury)
-
-If you want one developer-controlled wallet to receive marketplace payments, see **[07_APP_WALLET_OPTIONAL.md](./documentation/07_APP_WALLET_OPTIONAL.md)**. User flows do not require Entity Secret or these scripts.
-
 ## 📚 Documentation
 
 - **[06 User auth and Circle proxy](./documentation/06_USER_AUTH_AND_CIRCLE_PROXY.md)** - Session auth and user-controlled wallets
-- **[07 App wallet (optional)](./documentation/07_APP_WALLET_OPTIONAL.md)** - Marketplace treasury / one app wallet
-- **[01 Entity Secret setup](./documentation/01_ENTITY_SECRET_SETUP.md)** - For app wallet only
-- **[02 Wallet setup](./documentation/02_WALLET_SETUP.md)** - For app wallet only (create wallet set/wallets)
 - **[03 API Security](./documentation/03_API_SECURITY.md)** - API authentication
 - **[04 Transaction checking](./documentation/04_TRANSACTION_CHECKING.md)** - Monitor transactions
-- **[05 Token transfer](./documentation/05_TOKEN_TRANSFER.md)** - Token transfer (app wallet)
+- **[05 Token transfer](./documentation/05_TOKEN_TRANSFER.md)** - Token transfer
 
 ## 🎓 Learning Resources
 
