@@ -110,7 +110,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setState((s) => ({ ...s, loading: true, error: null }));
       try {
         await authApi.postGoogle(idToken);
-        await refreshUser();
+        const me = await refreshUser();
+        if (me?.hasCircleUser) {
+          await refreshWallets();
+        }
       } catch (e: unknown) {
         setState((s) => ({
           ...s,
@@ -122,7 +125,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setState((s) => ({ ...s, loading: false }));
       }
     },
-    [refreshUser]
+    [refreshUser, refreshWallets]
   );
 
   /**
