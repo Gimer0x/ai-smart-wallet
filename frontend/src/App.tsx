@@ -1,17 +1,15 @@
 import { useState } from 'react';
-import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from './context/AuthContext';
 import { useHandleCircleReturn } from './components/LoginView';
 import { Sidebar } from './components/Sidebar';
 import { ChatInterface } from './components/ChatInterface';
 import { DashboardView } from './components/DashboardView';
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
 function App() {
-  const { user, wallets, selectedWalletId, setSelectedWalletId, initialCheckDone, loading, logout, refreshWallets, startCircleWalletCreation, loginWithGoogle } = useAuth();
+  const { user, wallets, selectedWalletId, setSelectedWalletId, initialCheckDone, loading, error: authError, logout, refreshWallets, startCircleWalletCreation } = useAuth();
   const [currentView, setCurrentView] = useState('chat');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [loginRedirecting, setLoginRedirecting] = useState(false);
 
   const { status: circleReturnStatus, error: circleReturnError } = useHandleCircleReturn();
 
@@ -121,7 +119,11 @@ function App() {
         >
           {currentView === 'chat' ? (
             hasWallet ? (
-              <ChatInterface walletId={selectedWalletId ?? undefined} onPendingComplete={refreshWallets} />
+              <ChatInterface
+                walletId={selectedWalletId ?? undefined}
+                onPendingComplete={refreshWallets}
+                onRequestSignIn={() => startCircleWalletCreation({ forceRedirect: true })}
+              />
             ) : (
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
                 <div style={{ textAlign: 'center', color: 'var(--secondary)' }}>
@@ -132,7 +134,7 @@ function App() {
                       </p>
                       <button
                         type="button"
-                        onClick={startCircleWalletCreation}
+                        onClick={() => startCircleWalletCreation()}
                         style={{
                           padding: '0.75rem 1.5rem',
                           background: 'var(--primary)',
@@ -150,21 +152,32 @@ function App() {
                   ) : (
                     <>
                       <p style={{ marginBottom: '1rem', fontSize: '1.125rem' }}>
-                        Sign in to use the chat.
+                        Sign in with Google to create or access your wallet. Device token and wallet setup run automatically.
                       </p>
-                      {GOOGLE_CLIENT_ID ? (
-                        <div style={{ display: 'flex', justifyContent: 'center' }}>
-                          <GoogleLogin
-                            onSuccess={(res) => {
-                              if (res.credential) loginWithGoogle(res.credential);
-                            }}
-                            onError={() => {}}
-                            useOneTap={false}
-                          />
-                        </div>
-                      ) : (
-                        <p style={{ fontSize: '0.875rem', color: '#c33' }}>Set VITE_GOOGLE_CLIENT_ID for Google Sign-In.</p>
+                      {authError && (
+                        <p style={{ marginBottom: '1rem', fontSize: '0.875rem', color: '#c33' }}>{authError}</p>
                       )}
+                      <button
+                        type="button"
+                        disabled={loginRedirecting}
+                        onClick={async () => {
+                          setLoginRedirecting(true);
+                          await startCircleWalletCreation({ forceRedirect: true });
+                          setLoginRedirecting(false);
+                        }}
+                        style={{
+                          padding: '0.75rem 1.5rem',
+                          background: 'var(--primary)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontSize: '1rem',
+                          fontWeight: 500,
+                          cursor: loginRedirecting ? 'wait' : 'pointer',
+                        }}
+                      >
+                        {loginRedirecting ? 'Redirecting…' : 'Login with Google'}
+                      </button>
                     </>
                   )}
                 </div>

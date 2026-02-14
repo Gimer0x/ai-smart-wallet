@@ -5,10 +5,9 @@ import {
   useEffect,
   useMemo,
   useState,
-  ReactNode,
+  type ReactNode,
 } from 'react';
 import { authApi, circleApi, walletApi, type MeData, type Wallet } from '../services/api';
-
 
 type AuthState = {
   user: MeData | null;
@@ -23,7 +22,7 @@ type AuthState = {
 type AuthContextValue = AuthState & {
   setSelectedWalletId: (id: string | null) => void;
   loginWithGoogle: (idToken: string) => Promise<void>;
-  startCircleWalletCreation: () => Promise<void>;
+  startCircleWalletCreation: (options?: { forceRedirect?: boolean }) => Promise<void>;
   onCircleLoginComplete: (userToken: string, encryptionKey: string) => Promise<string | undefined>;
   executeChallengeAndFinish: (challengeId: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -71,9 +70,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const wallets = list || [];
       setState((s) => {
         const defaultId = wallets[0]?.id ?? null;
-        const selected = s.selectedWalletId && wallets.some((w) => w.id === s.selectedWalletId)
-          ? s.selectedWalletId
-          : defaultId;
+        const selected =
+          s.selectedWalletId && wallets.some((w) => w.id === s.selectedWalletId)
+            ? s.selectedWalletId
+            : defaultId;
         return {
           ...s,
           wallets,
@@ -82,7 +82,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           error: null,
         };
       });
-    } catch (e) {
+    } catch {
       setState((s) => ({ ...s, wallets: [], defaultWalletId: null }));
     }
   }, []);
@@ -102,8 +102,61 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (!cancelled) setState((s) => ({ ...s, loading: false, initialCheckDone: true }));
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [refreshUser, refreshWallets]);
+
+  /** Ensure device token in cookies on load (so "Login with Google" works without extra step). Skip when URL has hash (returning from OAuth). */
+  useEffect(() => {
+    const hash = typeof window !== 'undefined' ? window.location.hash : '';
+    if (hash) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getStoredCredentials, setDeviceCredentials, getDeviceId } = await import('../utils/circleSdk');
+        const appId = import.meta.env.VITE_CIRCLE_APP_ID;
+        const creds = getStoredCredentials();
+        if (creds?.deviceToken && creds?.deviceEncryptionKey) return;
+        if (!appId) return;
+        const deviceId = await getDeviceId(appId);
+        const data = await circleApi.createDeviceToken(deviceId);
+        if (cancelled) return;
+        setDeviceCredentials(data.deviceToken, data.deviceEncryptionKey);
+      } catch {
+        // Silent; user can still try Login with Google (startCircleWalletCreation creates token then)
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** Restore device credentials when missing (logged-in user, no hash). */
+  useEffect(() => {
+    if (!state.user?.hasCircleUser || state.wallets.length === 0) return;
+    const hash = typeof window !== 'undefined' ? window.location.hash : '';
+    if (hash) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getStoredCredentials, setDeviceCredentials, getDeviceId } = await import('../utils/circleSdk');
+        const appId = import.meta.env.VITE_CIRCLE_APP_ID;
+        const creds = getStoredCredentials();
+        if (creds?.deviceToken && creds?.deviceEncryptionKey) return;
+        if (!appId) return;
+        const deviceId = await getDeviceId(appId);
+        const data = await circleApi.createDeviceToken(deviceId);
+        if (cancelled) return;
+        setDeviceCredentials(data.deviceToken, data.deviceEncryptionKey);
+      } catch {
+        // Silent
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [state.user?.hasCircleUser, state.wallets.length]);
 
   const loginWithGoogle = useCallback(
     async (idToken: string) => {
@@ -121,74 +174,97 @@ export function AuthProvider({ children }: AuthProviderProps) {
           error: e instanceof Error ? e.message : 'Google sign-in failed',
         }));
         throw e;
-      } finally {
-        setState((s) => ({ ...s, loading: false }));
+      }
+      setState((s) => ({ ...s, loading: false }));
+    },
+    [refreshUser, refreshWallets]
+  );
+
+  const startCircleWalletCreation = useCallback(
+    async (options?: { forceRedirect?: boolean }) => {
+      console.log('[Login with Google] start', { options });
+      setState((s) => ({ ...s, error: null }));
+      const forceRedirect = options?.forceRedirect === true;
+      try {
+        if (!forceRedirect) {
+          const me = await refreshUser();
+          if (me?.hasCircleUser) {
+            await refreshWallets();
+            return;
+          }
+        }
+      } catch {
+        // Proceed to wallet creation flow
+      }
+      const appId = import.meta.env.VITE_CIRCLE_APP_ID;
+      const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+      console.log('[Login with Google] env check', { hasAppId: !!appId, hasGoogleClientId: !!googleClientId });
+      if (!appId || !googleClientId) {
+        console.warn('[Login with Google] missing env – aborting');
+        setState((s) => ({
+          ...s,
+          error: 'Missing VITE_CIRCLE_APP_ID or VITE_GOOGLE_CLIENT_ID',
+        }));
+        return;
+      }
+      try {
+        console.log('[Login with Google] loading circleSdk and W3SSdk...');
+        const { getDeviceId, setDeviceCredentials } = await import('../utils/circleSdk');
+        const { W3SSdk } = await import('@circle-fin/w3s-pw-web-sdk');
+        console.log('[Login with Google] getting deviceId...');
+        const deviceId = await getDeviceId(appId);
+        console.log('[Login with Google] deviceId received, calling createDeviceToken...');
+        const data = await circleApi.createDeviceToken(deviceId);
+        console.log('[Login with Google] device token received, setting cookies...');
+        setDeviceCredentials(data.deviceToken, data.deviceEncryptionKey);
+        const redirectUri = typeof window !== 'undefined' ? (window.location.pathname === '/' ? window.location.origin : window.location.origin + window.location.pathname) : '';
+        console.log('[Login with Google] creating SDK, redirectUri:', redirectUri);
+        const sdk = new W3SSdk(
+          {
+            appSettings: { appId },
+            loginConfigs: {
+              deviceToken: data.deviceToken,
+              deviceEncryptionKey: data.deviceEncryptionKey,
+              google: { clientId: googleClientId, redirectUri },
+            },
+          },
+          undefined
+        );
+        console.log('[Login with Google] calling performLogin("Google") – expect redirect...');
+        (sdk as { performLogin: (provider: string) => Promise<void> }).performLogin('Google');
+        await new Promise((r) => setTimeout(r, 100));
+        if (typeof window !== 'undefined' && window.location.href.startsWith('http')) {
+          const state = crypto.randomUUID();
+          const nonce = crypto.randomUUID();
+          const scope = encodeURIComponent(
+            'openid https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email'
+          );
+          const responseType = encodeURIComponent('id_token token');
+          const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(googleClientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&state=${state}&response_type=${responseType}&nonce=${nonce}&prompt=select_account`;
+          window.localStorage.setItem('socialLoginProvider', 'Google');
+          window.localStorage.setItem('state', state);
+          window.localStorage.setItem('nonce', nonce);
+          console.log('[Login with Google] SDK did not redirect – doing manual redirect');
+          window.location.href = url;
+        }
+        console.log('[Login with Google] performLogin returned (no redirect?)');
+      } catch (e: unknown) {
+        console.error('[Login with Google] error', e);
+        setState((s) => ({
+          ...s,
+          error: e instanceof Error ? e.message : 'Failed to start wallet creation',
+        }));
       }
     },
     [refreshUser, refreshWallets]
   );
 
-  /**
-   * Login with Google (Circle flow): first check if this user already has a wallet; if not, create device token then redirect to Google.
-   * On return: useHandleCircleReturn → onCircleLoginComplete (initialize user) → executeChallengeAndFinish (create wallet when necessary).
-   * Flow: 0) Check if wallet already exists for this user, 1) Create device token, 2) Login with Google (redirect), 3) Initialize user, 4) Create wallet (if challenge returned).
-   */
-  const startCircleWalletCreation = useCallback(async () => {
-    setState((s) => ({ ...s, error: null }));
-    try {
-      // 0) Check if this user/email already has a wallet (session may have been updated)
-      const me = await refreshUser();
-      if (me?.hasCircleUser) {
-        await refreshWallets();
-        return; // Already have wallet(s); no redirect needed
-      }
-    } catch {
-      // Not logged in or other error; proceed to wallet creation flow
-    }
-    const appId = import.meta.env.VITE_CIRCLE_APP_ID;
-    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
-    // Log env vars used for wallet creation (for validation; remove in production if desired)
-    console.log('[Wallet creation] .env values:', {
-      VITE_CIRCLE_APP_ID: appId ?? '(missing)',
-      VITE_GOOGLE_CLIENT_ID: googleClientId ?? '(missing)',
-      VITE_API_BASE_URL: apiBaseUrl ?? '(default /api)',
-      redirectOrigin: typeof window !== 'undefined' ? window.location.origin : '(ssr)',
-    });
-    if (!appId || !googleClientId) {
-      setState((s) => ({
-        ...s,
-        error: 'Missing VITE_CIRCLE_APP_ID or VITE_GOOGLE_CLIENT_ID',
-      }));
-      return;
-    }
-    try {
-      const { getCircleSdk, getDeviceId, setDeviceCredentials } = await import('../utils/circleSdk');
-      // 1) Create device token (part of "Login with Google" — required before Circle redirect)
-      const deviceId = await getDeviceId(appId);
-      const data = await circleApi.createDeviceToken(deviceId);
-      setDeviceCredentials(data.deviceToken, data.deviceEncryptionKey);
-      // 2) Login with Google (redirect; on return we initialize user and create wallet)
-      const sdk = getCircleSdk(appId, googleClientId, data.deviceToken, data.deviceEncryptionKey);
-      (sdk as { performLogin: (p: string) => void }).performLogin('Google');
-    } catch (e: unknown) {
-      setState((s) => ({
-        ...s,
-        error: e instanceof Error ? e.message : 'Failed to start wallet creation',
-      }));
-    }
-  }, [refreshUser, refreshWallets]);
-
-  /**
-   * After return from Google: 3) Initialize user (creates wallet challenge when necessary), 4) Create wallet by executing challenge.
-   */
   const onCircleLoginComplete = useCallback(
     async (userToken: string, encryptionKey: string) => {
       setState((s) => ({ ...s, loading: true, error: null }));
       try {
         const { setUserCredentials } = await import('../utils/circleSdk');
         setUserCredentials(userToken, encryptionKey);
-        // 3) Initialize user (backend returns challengeId when wallet must be created)
         const result = await circleApi.initializeUser({
           userToken,
           encryptionKey,
@@ -198,7 +274,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         await refreshUser();
         if (result?.challengeId) {
           setState((s) => ({ ...s, loading: false }));
-          return result.challengeId; // 4) Caller executes challenge to create wallet
+          return result.challengeId;
         }
         await refreshWallets();
       } catch (e: unknown) {

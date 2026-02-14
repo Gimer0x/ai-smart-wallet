@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../context/AuthContext';
-import { getCircleSdk, getStoredCredentials } from '../utils/circleSdk';
+import { authApi } from '../services/api';
+import { getCircleSdk, getStoredCredentials, setUserCredentials } from '../utils/circleSdk';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const CIRCLE_APP_ID = import.meta.env.VITE_CIRCLE_APP_ID;
@@ -49,8 +49,11 @@ export function useHandleCircleReturn() {
           setStatus('error');
           return;
         }
+        const { userToken, encryptionKey } = result;
         try {
-          const challengeId = await onCircleLoginComplete(result.userToken, result.encryptionKey);
+          setUserCredentials(userToken, encryptionKey);
+          await authApi.circleLogin(userToken, encryptionKey);
+          const challengeId = await onCircleLoginComplete(userToken, encryptionKey);
           if (challengeId !== undefined && challengeId !== '') {
             setStatus('challenge');
             await executeChallengeAndFinish(challengeId);
@@ -75,12 +78,10 @@ export function LoginView() {
     loading,
     error: authError,
     initialCheckDone,
-    loginWithGoogle,
     startCircleWalletCreation,
     refreshUser,
     refreshWallets,
   } = useAuth();
-  const [idToken, setIdToken] = useState('');
   const [googleLoading, setGoogleLoading] = useState(false);
   const { status: returnStatus, error: returnError } = useHandleCircleReturn();
 
@@ -100,15 +101,6 @@ export function LoginView() {
     });
     return () => { cancelled = true; };
   }, [needsWallet, user?.googleSub, refreshUser, refreshWallets]);
-
-  const handleGoogleCredential = async (credential: string) => {
-    setGoogleLoading(true);
-    try {
-      await loginWithGoogle(credential);
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
 
   if (!initialCheckDone || loading) {
     return (
@@ -216,57 +208,29 @@ export function LoginView() {
         {needsGoogle && (
           <>
             <p style={{ marginBottom: '1rem', fontSize: '0.875rem', color: 'var(--secondary)' }}>
-              Sign in with Google to continue. You will then create a wallet.
+              Sign in with Google to create or access your wallet. Device token and wallet setup run automatically.
             </p>
-            {GOOGLE_CLIENT_ID ? (
-              <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'center' }}>
-                <GoogleLogin
-                  onSuccess={(res) => {
-                    if (res.credential) handleGoogleCredential(res.credential);
-                  }}
-                  onError={() => setGoogleLoading(false)}
-                  useOneTap={false}
-                />
-              </div>
-            ) : (
-              <p style={{ fontSize: '0.875rem', color: '#c33' }}>Set VITE_GOOGLE_CLIENT_ID for Google Sign-In.</p>
-            )}
-            {process.env.NODE_ENV === 'development' && (
-              <div style={{ marginTop: '1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.25rem' }}>
-                  Or paste Google ID token (dev):
-                </label>
-                <input
-                  type="text"
-                  value={idToken}
-                  onChange={(e) => setIdToken(e.target.value)}
-                  placeholder="Paste id_token"
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem',
-                    fontSize: '0.75rem',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px',
-                  }}
-                />
-                <button
-                  type="button"
-                  disabled={!idToken.trim() || googleLoading}
-                  onClick={() => handleGoogleCredential(idToken)}
-                  style={{
-                    marginTop: '0.5rem',
-                    padding: '0.5rem 1rem',
-                    background: 'var(--primary)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: idToken && !googleLoading ? 'pointer' : 'not-allowed',
-                  }}
-                >
-                  {googleLoading ? 'Signing in...' : 'Sign in with token'}
-                </button>
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                setGoogleLoading(true);
+                startCircleWalletCreation({ forceRedirect: true });
+              }}
+              disabled={googleLoading}
+              style={{
+                width: '100%',
+                padding: '0.75rem 1.25rem',
+                background: 'var(--primary)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '0.9375rem',
+                fontWeight: 500,
+                cursor: googleLoading ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {googleLoading ? 'Redirecting…' : 'Login with Google'}
+            </button>
           </>
         )}
 
@@ -279,7 +243,7 @@ export function LoginView() {
             </p>
             <button
               type="button"
-              onClick={startCircleWalletCreation}
+              onClick={() => startCircleWalletCreation()}
               disabled={loading}
               style={{
                 width: '100%',

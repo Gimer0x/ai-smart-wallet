@@ -57,6 +57,16 @@ export const authApi = {
       body: JSON.stringify({ idToken }),
     }),
 
+  /**
+   * Create session from Circle user credentials (after "Login with Google" via Circle SDK).
+   * Call this right after onLoginComplete so the app has one sign-in flow.
+   */
+  circleLogin: (userToken: string, encryptionKey: string) =>
+    apiRequest<{ sub: string }>('/auth/circle-login', {
+      method: 'POST',
+      body: JSON.stringify({ userToken, encryptionKey }),
+    }),
+
   logout: () =>
     apiRequest<unknown>('/auth/logout', { method: 'POST' }),
 

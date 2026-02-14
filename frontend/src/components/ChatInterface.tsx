@@ -18,9 +18,11 @@ interface ChatInterfaceProps {
   /** Optional: use this wallet for chat; backend uses default if not provided */
   walletId?: string;
   onPendingComplete?: () => void;
+  /** When provided, shown when user tries to sign but user credentials are missing (enables "Sign in with Google to enable signing") */
+  onRequestSignIn?: () => void;
 }
 
-export function ChatInterface({ walletId, onPendingComplete }: ChatInterfaceProps) {
+export function ChatInterface({ walletId, onPendingComplete, onRequestSignIn }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -33,6 +35,8 @@ export function ChatInterface({ walletId, onPendingComplete }: ChatInterfaceProp
   const [loading, setLoading] = useState(false);
   const [signingMessageId, setSigningMessageId] = useState<string | null>(null);
   const [signError, setSignError] = useState<string | null>(null);
+  /** When set, this message's pending action failed due to missing user creds; show "Sign in with Google to enable signing" if onRequestSignIn provided */
+  const [signNeedsCredsMessageId, setSignNeedsCredsMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -86,47 +90,96 @@ export function ChatInterface({ walletId, onPendingComplete }: ChatInterfaceProp
   };
 
   const handleSignPendingAction = async (messageId: string, action: PendingAction) => {
+    console.log('[Sign & send] Clicked', { messageId, actionType: action.type, action });
     setSignError(null);
     const creds = getStoredCredentials();
+    const hasDevice = !!(creds?.deviceToken && creds?.deviceEncryptionKey);
+    const hasUser = !!(creds?.userToken && creds?.encryptionKey);
+    const hasEnv = !!(CIRCLE_APP_ID && GOOGLE_CLIENT_ID);
+    console.log('[Sign & send] Credentials check', {
+      hasDeviceToken: !!creds?.deviceToken,
+      hasDeviceEncryptionKey: !!creds?.deviceEncryptionKey,
+      hasUserToken: !!creds?.userToken,
+      hasEncryptionKey: !!creds?.encryptionKey,
+      hasCircleAppId: !!CIRCLE_APP_ID,
+      hasGoogleClientId: !!GOOGLE_CLIENT_ID,
+      credsPresent: hasDevice && hasUser && hasEnv,
+    });
     if (!creds?.deviceToken || !creds?.deviceEncryptionKey || !creds?.userToken || !creds?.encryptionKey || !CIRCLE_APP_ID || !GOOGLE_CLIENT_ID) {
-      setSignError('Missing Circle credentials. Please sign in again.');
+      const missing = [
+        !creds?.deviceToken && 'deviceToken',
+        !creds?.deviceEncryptionKey && 'deviceEncryptionKey',
+        !creds?.userToken && 'userToken',
+        !creds?.encryptionKey && 'encryptionKey',
+        !CIRCLE_APP_ID && 'VITE_CIRCLE_APP_ID',
+        !GOOGLE_CLIENT_ID && 'VITE_GOOGLE_CLIENT_ID',
+      ].filter(Boolean) as string[];
+      console.warn('[Sign & send] Missing credentials or env – aborting', { missing });
+      setSignError(
+        !creds?.userToken || !creds?.encryptionKey
+          ? 'Missing Circle credentials. Click "Sign in with Google to enable signing" below, or log out and sign in again.'
+          : 'Missing Circle credentials. Please sign in again.'
+      );
+      setSignNeedsCredsMessageId(messageId);
       return;
     }
+    setSignNeedsCredsMessageId(null);
     setSigningMessageId(messageId);
+    setSignNeedsCredsMessageId(null);
     try {
+      console.log('[Sign & send] Creating Circle SDK...');
       const sdk = getCircleSdk(CIRCLE_APP_ID, GOOGLE_CLIENT_ID, creds.deviceToken, creds.deviceEncryptionKey);
       sdk.setAuthentication({ userToken: creds.userToken, encryptionKey: creds.encryptionKey });
+      console.log('[Sign & send] SDK created and authentication set');
       if (action.type === 'transfer') {
+        console.log('[Sign & send] Preparing transfer...', { walletId: action.walletId, amount: action.amount, destination: action.destinationAddress });
         const { challengeId } = await walletApi.prepareTransfer(action.walletId, {
           tokenId: action.tokenId,
           destinationAddress: action.destinationAddress,
           amount: action.amount,
           feeLevel: action.feeLevel,
         });
+        console.log('[Sign & send] Got challengeId, executing challenge...', { challengeId });
         await new Promise<void>((resolve, reject) => {
           sdk.execute(challengeId, (err: unknown) => {
-            if (err) reject(new Error((err as Error).message || 'Signing failed'));
-            else resolve();
+            if (err) {
+              console.error('[Sign & send] SDK execute error', err);
+              reject(new Error((err as Error).message || 'Signing failed'));
+            } else {
+              console.log('[Sign & send] Challenge completed successfully');
+              resolve();
+            }
           });
         });
       } else {
+        console.log('[Sign & send] Preparing purchase...', { ebookId: action.ebookId, walletId: action.walletId });
         const data = await marketplaceApi.preparePurchase(action.ebookId, action.walletId);
+        console.log('[Sign & send] Got purchase challengeId, executing...', { challengeId: data.challengeId });
         await new Promise<void>((resolve, reject) => {
           sdk.execute(data.challengeId, (err: unknown) => {
-            if (err) reject(new Error((err as Error).message || 'Signing failed'));
-            else resolve();
+            if (err) {
+              console.error('[Sign & send] SDK execute error', err);
+              reject(new Error((err as Error).message || 'Signing failed'));
+            } else {
+              console.log('[Sign & send] Purchase challenge completed');
+              resolve();
+            }
           });
         });
         await marketplaceApi.confirmPurchase(action.walletId, action.ebookId);
+        console.log('[Sign & send] Purchase confirmed');
       }
+      console.log('[Sign & send] Success – updating UI and calling onPendingComplete');
       setMessages((prev) =>
         prev.map((m) => (m.id === messageId ? { ...m, pendingAction: undefined, pendingCompleted: true } : m))
       );
       onPendingComplete?.();
     } catch (e) {
+      console.error('[Sign & send] Error', e);
       setSignError(e instanceof Error ? e.message : 'Signing failed');
     } finally {
       setSigningMessageId(null);
+      console.log('[Sign & send] Flow finished');
     }
   };
 
@@ -250,7 +303,7 @@ export function ChatInterface({ walletId, onPendingComplete }: ChatInterfaceProp
                     ) : (
                       <span>Purchase e-book {message.pendingAction.ebookId}</span>
                     )}
-                    <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div style={{ marginTop: '0.5rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
                       <button
                         type="button"
                         disabled={signingMessageId === message.id}
@@ -267,8 +320,25 @@ export function ChatInterface({ walletId, onPendingComplete }: ChatInterfaceProp
                       >
                         {signingMessageId === message.id ? 'Opening…' : message.pendingAction!.type === 'transfer' ? 'Sign & send' : 'Sign & pay'}
                       </button>
-                      {signError && signingMessageId === message.id && (
+                      {signError && (signingMessageId === message.id || signNeedsCredsMessageId === message.id) && (
                         <span style={{ color: '#c33', fontSize: '0.75rem' }}>{signError}</span>
+                      )}
+                      {signNeedsCredsMessageId === message.id && onRequestSignIn && (
+                        <button
+                          type="button"
+                          onClick={onRequestSignIn}
+                          style={{
+                            padding: '0.4rem 0.75rem',
+                            background: 'transparent',
+                            color: 'var(--primary)',
+                            border: '1px solid var(--primary)',
+                            borderRadius: '6px',
+                            fontSize: '0.8rem',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Sign in with Google to enable signing
+                        </button>
                       )}
                     </div>
                   </div>
