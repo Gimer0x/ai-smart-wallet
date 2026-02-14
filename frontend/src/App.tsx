@@ -157,7 +157,7 @@ function App() {
                   ) : (
                     <>
                       <p style={{ marginBottom: '1rem', fontSize: '1.125rem' }}>
-                        Sign in with Google to create or access your wallet. Device token and wallet setup run automatically.
+                        Sign in to create or access your wallet
                       </p>
                       {authError && (
                         <p style={{ marginBottom: '1rem', fontSize: '0.875rem', color: '#c33' }}>{authError}</p>
