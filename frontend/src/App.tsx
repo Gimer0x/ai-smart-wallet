@@ -21,6 +21,11 @@ function App() {
     setCurrentView(view);
   };
 
+  const handleLogout = async () => {
+    await logout();
+    setCurrentView('chat');
+  };
+
   const hasWallet = user?.hasCircleUser && wallets.length > 0;
   const needsWallet = user && (!user.hasCircleUser || wallets.length === 0);
 
@@ -83,7 +88,7 @@ function App() {
         user={user}
         hasWallet={!!hasWallet}
         needsWallet={!!needsWallet}
-        onLogout={logout}
+        onLogout={handleLogout}
         onCreateWallet={startCircleWalletCreation}
       />
 
