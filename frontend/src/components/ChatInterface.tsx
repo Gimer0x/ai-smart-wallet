@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { chatApi, walletApi, marketplaceApi, type PendingAction } from '../services/api';
+import { chatApi, walletApi, type PendingAction } from '../services/api';
 import { getCircleSdk, getStoredCredentials } from '../utils/circleSdk';
 
 const CIRCLE_APP_ID = import.meta.env.VITE_CIRCLE_APP_ID;
@@ -27,7 +27,7 @@ export function ChatInterface({ walletId, onPendingComplete, onRequestSignIn }: 
     {
       id: '1',
       role: 'agent',
-      content: 'Hello! I\'m your smart wallet assistant. I can help you check your balance, transfer tokens, and manage your wallet. How can I help you today?',
+      content: 'Hello! I\'m your smart wallet assistant. I can help you purchase e-books, check your balance, and manage your wallet. How can I help you today?',
       timestamp: new Date(),
     },
   ]);
@@ -152,21 +152,7 @@ export function ChatInterface({ walletId, onPendingComplete, onRequestSignIn }: 
           });
         });
       } else {
-        console.log('[Sign & send] Preparing purchase...', { ebookId: action.ebookId, walletId: action.walletId });
-        const data = await marketplaceApi.preparePurchase(action.ebookId, action.walletId);
-        console.log('[Sign & send] Got purchase challengeId, executing...', { challengeId: data.challengeId });
-        await new Promise<void>((resolve, reject) => {
-          sdk.execute(data.challengeId, (err: unknown) => {
-            if (err) {
-              console.error('[Sign & send] SDK execute error', err);
-              reject(new Error((err as Error).message || 'Signing failed'));
-            } else {
-              console.log('[Sign & send] Purchase challenge completed');
-              resolve();
-            }
-          });
-        });
-        await marketplaceApi.confirmPurchase(action.walletId, action.ebookId);
+       
         console.log('[Sign & send] Purchase confirmed');
       }
       console.log('[Sign & send] Success – updating UI and calling onPendingComplete');

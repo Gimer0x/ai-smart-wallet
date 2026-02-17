@@ -4,7 +4,6 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import walletRoutes from './routes/wallet.routes';
 import chatRoutes from './routes/chat.routes';
-import marketplaceRoutes from './routes/marketplace.routes';
 import circleUserRoutes from './routes/circle-user.routes';
 import authRoutes from './routes/auth.routes';
 import { sessionMiddleware } from './middleware/session';
@@ -41,7 +40,6 @@ app.use('/api/circle', circleUserRoutes);
 // Protected routes: wallets require Circle user (so we can list only their wallets)
 app.use('/api/wallets', requireCircleUser, walletRoutes);
 app.use('/api/chat', requireAuth, chatRoutes);
-app.use('/api/marketplace', requireAuth, marketplaceRoutes);
 
 // Start server
 app.listen(PORT, () => {
@@ -50,7 +48,7 @@ app.listen(PORT, () => {
   console.log(`🔄 Circle user proxy at http://localhost:${PORT}/api/circle`);
   console.log(`📡 Wallet API at http://localhost:${PORT}/api/wallets`);
   console.log(`💬 Chat API at http://localhost:${PORT}/api/chat`);
-  console.log(`🛒 Marketplace API at http://localhost:${PORT}/api/marketplace`);
+  
   if (!process.env.CIRCLE_API_KEY) {
     console.warn('⚠️  CIRCLE_API_KEY is not set. Set it in backend/.env to enable wallet creation.');
   } else {

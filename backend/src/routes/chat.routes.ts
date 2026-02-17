@@ -11,7 +11,6 @@ import { getSession } from '../utils/getSession';
 import { listWallets } from '../circleUser/circleUserClient';
 import { processMessage } from '../agent/agent';
 import { createUserWalletTools } from '../agent/tools/userWallet.tools';
-import { createMarketplaceTools } from '../agent/tools/marketplace.tools';
 
 const router = Router();
 
@@ -58,8 +57,7 @@ router.post('/', requireCircleUser, async (req: Request, res: Response) => {
     }
 
     const walletTools = createUserWalletTools(userToken);
-    const marketplaceTools = createMarketplaceTools(userToken);
-    const allTools = [...walletTools, ...marketplaceTools];
+    const allTools = [...walletTools];
     const result = await processMessage(message, activeWalletId, allTools);
     console.log('Generated response:', result.response, result.pendingAction ? '(with pending action)' : '');
 
