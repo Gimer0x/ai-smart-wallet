@@ -1,13 +1,13 @@
 /**
  * Circle user-controlled wallet proxy routes.
  * - POST /device-token: public, returns deviceToken + deviceEncryptionKey for SDK.
- * - POST /initialize-user: requires auth, stores userToken in session and circleUserStore, returns challengeId or alreadyInitialized.
+ * - POST /initialize-user: requires auth, stores userToken in session only; returns challengeId or alreadyInitialized.
+ *   encryptionKey is never sent; it stays in client sessionStorage.
  */
 
 import { Router, Request, Response } from "express";
 import { createDeviceToken, initializeUser } from "../circleUser/circleUserClient";
 import { getSession } from "../utils/getSession";
-import { setCircleUserForGoogleSub } from "../store/circleUserStore";
 import { requireAuth } from "../middleware/requireAuth";
 
 const router = Router();
@@ -42,20 +42,18 @@ router.post("/device-token", async (req: Request, res: Response) => {
 
 /**
  * POST /api/circle/initialize-user
- * Body: { userToken, encryptionKey, blockchains?, accountType? }. Requires Google session.
- * Stores credentials in session and circleUserStore; returns challengeId for wallet creation or alreadyInitialized.
+ * Body: { userToken, blockchains?, accountType? }. Requires Google session. encryptionKey is never sent.
  */
 router.post("/initialize-user", requireAuth, async (req: Request, res: Response) => {
   try {
-    const { userToken, encryptionKey, blockchains, accountType } = req.body;
-    if (!userToken || !encryptionKey || typeof userToken !== "string" || typeof encryptionKey !== "string") {
+    const { userToken, blockchains, accountType } = req.body;
+    if (!userToken || typeof userToken !== "string") {
       return res.status(400).json({
         success: false,
-        error: "userToken and encryptionKey (strings) are required in body",
+        error: "userToken (string) is required in body",
       });
     }
     const session = getSession(req);
-    const googleSub = session.googleSub!;
 
     try {
       const result = await initializeUser(userToken, {
@@ -64,8 +62,6 @@ router.post("/initialize-user", requireAuth, async (req: Request, res: Response)
       });
 
       session.circleUserToken = userToken;
-      session.circleEncryptionKey = encryptionKey;
-      setCircleUserForGoogleSub(googleSub, userToken, encryptionKey);
       await new Promise<void>((resolve, reject) => {
         req.session.save((err) => (err ? reject(err) : resolve()));
       });
@@ -79,10 +75,7 @@ router.post("/initialize-user", requireAuth, async (req: Request, res: Response)
     } catch (err: unknown) {
       const code = (err as { code?: number }).code;
       if (code === 155106) {
-        // User already initialized - still store credentials and treat as success
         session.circleUserToken = userToken;
-        session.circleEncryptionKey = encryptionKey;
-        setCircleUserForGoogleSub(googleSub, userToken, encryptionKey);
         await new Promise<void>((resolve, reject) => {
           req.session.save((err) => (err ? reject(err) : resolve()));
         });

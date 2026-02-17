@@ -27,7 +27,7 @@ export function ChatInterface({ walletId, onPendingComplete, onRequestSignIn }: 
     {
       id: '1',
       role: 'agent',
-      content: 'Hello! I\'m your smart wallet assistant. I can help you purchase e-books, check your balance, and manage your wallet. How can I help you today?',
+      content: 'Hello! I\'m your smart wallet assistant. I can help you check your balance, transfer tokens, and manage your wallet. How can I help you today?',
       timestamp: new Date(),
     },
   ]);

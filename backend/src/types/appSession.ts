@@ -6,5 +6,4 @@ export interface AppSession {
   googleSub?: string;
   email?: string;
   circleUserToken?: string;
-  circleEncryptionKey?: string;
 }

@@ -1,7 +1,7 @@
 /**
  * Circle Programmable Wallets Web SDK helper.
- * Cookies approach: device creds in COOKIES (before redirect), user creds in LOCALSTORAGE (after first login).
- * So you only "Sign in with Google to enable signing" once; then Sign & send works without signing in again.
+ * Device creds in cookies (before redirect). User creds in sessionStorage only (one user per tab; cleared when tab closes).
+ * encryptionKey is never sent to the backend; used only in the browser with the SDK for signing.
  */
 
 import { W3SSdk } from '@circle-fin/w3s-pw-web-sdk';
@@ -39,47 +39,27 @@ function deleteCookie(name: string): void {
   document.cookie = `${name}=; path=/; max-age=0`;
 }
 
-function getLocalStorage(): Storage | null {
-  return typeof window !== 'undefined' ? window.localStorage : null;
-}
-
 /** Set device credentials (call before redirect to Google). Stored in cookies so they're available when page loads after redirect. */
 export function setDeviceCredentials(deviceToken: string, deviceEncryptionKey: string): void {
   setCookie(COOKIE_DEVICE_TOKEN, deviceToken, COOKIE_MAX_AGE_DAYS);
   setCookie(COOKIE_DEVICE_KEY, deviceEncryptionKey, COOKIE_MAX_AGE_DAYS);
 }
 
-/** Set user credentials (call in onLoginComplete after first Google login). Stored in localStorage so they survive refresh and new tabs. */
+/** Set user credentials (call once in onLoginComplete after successful Google login). sessionStorage only; cleared when tab closes. */
 export function setUserCredentials(userToken: string, encryptionKey: string): void {
-  const ls = getLocalStorage();
-  if (ls) {
-    ls.setItem(STORAGE_USER_TOKEN, userToken);
-    ls.setItem(STORAGE_ENCRYPTION_KEY, encryptionKey);
+  if (typeof window !== 'undefined' && window.sessionStorage) {
+    window.sessionStorage.setItem(STORAGE_USER_TOKEN, userToken);
+    window.sessionStorage.setItem(STORAGE_ENCRYPTION_KEY, encryptionKey);
   }
 }
 
-/** Get credentials: device from cookies, user from localStorage. Migrates from sessionStorage once if present. Cleared on logout. */
+/** Get credentials: device from cookies, user from sessionStorage. Cleared on logout. */
 export function getStoredCredentials(): StoredCredentials | null {
   const deviceToken = getCookie(COOKIE_DEVICE_TOKEN);
   const deviceEncryptionKey = getCookie(COOKIE_DEVICE_KEY);
-  const ls = getLocalStorage();
-  let userToken = ls?.getItem(STORAGE_USER_TOKEN) ?? undefined;
-  let encryptionKey = ls?.getItem(STORAGE_ENCRYPTION_KEY) ?? undefined;
-  // One-time migration: copy user creds from sessionStorage to localStorage
-  if ((!userToken || !encryptionKey) && typeof window !== 'undefined' && window.sessionStorage) {
-    const su = window.sessionStorage.getItem(STORAGE_USER_TOKEN);
-    const se = window.sessionStorage.getItem(STORAGE_ENCRYPTION_KEY);
-    if (su && se) {
-      userToken = su;
-      encryptionKey = se;
-      if (ls) {
-        ls.setItem(STORAGE_USER_TOKEN, su);
-        ls.setItem(STORAGE_ENCRYPTION_KEY, se);
-      }
-      window.sessionStorage.removeItem(STORAGE_USER_TOKEN);
-      window.sessionStorage.removeItem(STORAGE_ENCRYPTION_KEY);
-    }
-  }
+  const ss = typeof window !== 'undefined' ? window.sessionStorage : null;
+  const userToken = ss?.getItem(STORAGE_USER_TOKEN) ?? undefined;
+  const encryptionKey = ss?.getItem(STORAGE_ENCRYPTION_KEY) ?? undefined;
   if (!deviceToken && !deviceEncryptionKey && !userToken) return null;
   return {
     deviceToken,
@@ -89,14 +69,10 @@ export function getStoredCredentials(): StoredCredentials | null {
   };
 }
 
+/** Clear all Circle credentials (call on logout or when session is invalid). */
 export function clearCircleStorage(): void {
   deleteCookie(COOKIE_DEVICE_TOKEN);
   deleteCookie(COOKIE_DEVICE_KEY);
-  const ls = getLocalStorage();
-  if (ls) {
-    ls.removeItem(STORAGE_USER_TOKEN);
-    ls.removeItem(STORAGE_ENCRYPTION_KEY);
-  }
   const ss = typeof window !== 'undefined' ? window.sessionStorage : null;
   if (ss) {
     ss.removeItem(STORAGE_USER_TOKEN);

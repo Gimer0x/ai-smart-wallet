@@ -58,13 +58,13 @@ export const authApi = {
     }),
 
   /**
-   * Create session from Circle user credentials (after "Login with Google" via Circle SDK).
-   * Call this right after onLoginComplete so the app has one sign-in flow.
+   * Create session from Circle userToken only (after "Login with Google" via Circle SDK).
+   * encryptionKey is never sent; it stays in sessionStorage for signing in the browser.
    */
-  circleLogin: (userToken: string, encryptionKey: string) =>
+  circleLogin: (userToken: string) =>
     apiRequest<{ sub: string }>('/auth/circle-login', {
       method: 'POST',
-      body: JSON.stringify({ userToken, encryptionKey }),
+      body: JSON.stringify({ userToken }),
     }),
 
   logout: () =>
@@ -84,12 +84,10 @@ export const circleApi = {
     }),
 
   /**
-   * Initialize Circle user (requires Google session).
-   * Stores userToken in session; returns challengeId for wallet creation.
+   * Initialize Circle user (requires Google session). Sends only userToken; encryptionKey stays in browser.
    */
   initializeUser: (body: {
     userToken: string;
-    encryptionKey: string;
     blockchains?: string[];
     accountType?: 'SCA' | 'EOA';
   }) =>

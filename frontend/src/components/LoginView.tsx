@@ -52,7 +52,7 @@ export function useHandleCircleReturn() {
         const { userToken, encryptionKey } = result;
         try {
           setUserCredentials(userToken, encryptionKey);
-          await authApi.circleLogin(userToken, encryptionKey);
+          await authApi.circleLogin(userToken);
           const challengeId = await onCircleLoginComplete(userToken, encryptionKey);
           if (challengeId !== undefined && challengeId !== '') {
             setStatus('challenge');

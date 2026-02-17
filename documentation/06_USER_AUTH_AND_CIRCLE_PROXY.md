@@ -9,7 +9,7 @@ This document describes the backend support for **user-controlled wallets**: ses
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/api/circle/device-token` | None | Body: `{ deviceId }`. Returns `deviceToken` and `deviceEncryptionKey` for the Circle SDK. |
-| POST | `/api/circle/initialize-user` | Session (Google) | Body: `{ userToken, encryptionKey [, blockchains, accountType ] }`. Stores Circle user in session; returns `challengeId` for wallet creation. |
+| POST | `/api/circle/initialize-user` | Session (Google) | Body: `{ userToken [, blockchains, accountType ] }`. Stores only `userToken` in session; returns `challengeId`. `encryptionKey` is never sent; it stays in client sessionStorage. |
 | GET | `/api/circle/wallets` | Session + Circle user | Lists wallets for the current user. |
 | GET | `/api/circle/wallets/:walletId/balance` | Session + Circle user | Balance for `walletId`; verifies the wallet belongs to the current user. |
 
@@ -28,6 +28,7 @@ No Entity Secret is used for these endpoints.
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/api/auth/google` | Body: `{ idToken }` (Google ID token). Verifies token, creates session with `googleSub`, `email`. |
+| POST | `/api/auth/circle-login` | Body: `{ userToken }` (from Circle SDK onLoginComplete). Creates/updates session with derived `googleSub` and `circleUserToken`. Encryption key is never sent. |
 | POST | `/api/auth/logout` | Destroys session. |
 | GET | `/api/auth/me` | Returns current session user (`googleSub`, `email`, `hasCircleUser`). |
 
@@ -35,7 +36,7 @@ No Entity Secret is used for these endpoints.
 
 - **Session store:** in-memory (default `express-session`). For production, set a store (e.g. Redis) via `sessionMiddleware` options.
 - **Cookie:** `wallet-ai.sid`, httpOnly, 7-day maxAge, sameSite lax.
-- **Session fields:** `googleSub`, `email`, `circleUserToken`, `circleEncryptionKey` (set after `/api/circle/initialize-user`).
+- **Session fields:** `googleSub`, `email`, `circleUserToken` (set after `/api/auth/circle-login` or `/api/circle/initialize-user`). The encryption key is never stored on the server; it lives only in the client’s sessionStorage for signing.
 
 ### Middleware
 
@@ -68,6 +69,6 @@ No Entity Secret is used for these endpoints.
 
 1. **Device token** – `POST /api/circle/device-token` with `deviceId` from Circle SDK; store `deviceToken` and `deviceEncryptionKey` for the SDK.
 2. **Sign in with Google** – Get Google ID token (e.g. Google Sign-In button). Call `POST /api/auth/google` with `{ idToken }`; session cookie is set.
-3. **Initialize user** – In the frontend, use Circle SDK to complete “Login with Google” (using device token); Circle returns `userToken` and `encryptionKey`. Call `POST /api/circle/initialize-user` with `{ userToken, encryptionKey }`; backend stores them in session and returns `challengeId`.
+3. **Initialize user** – In the frontend, use Circle SDK to complete “Login with Google” (using device token); Circle returns `userToken` and `encryptionKey`. Store both in sessionStorage (fixed keys `circleUserToken`, `circleEncryptionKey`). Call `POST /api/auth/circle-login` with `{ userToken }` and `POST /api/circle/initialize-user` with `{ userToken }` only; backend stores only `userToken` in session and returns `challengeId`. The encryption key is never sent to the server.
 4. **Create wallet** – Frontend uses Circle SDK to execute the challenge; user approves; wallet is created.
 5. **Use app** – Call `GET /api/circle/wallets` to list wallets; use `GET /api/circle/wallets/:walletId/balance` for balance; send chat with optional `walletId` (or omit to use first wallet). All requests must include credentials so the session cookie is sent.

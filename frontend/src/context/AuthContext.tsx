@@ -91,7 +91,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
     let cancelled = false;
     (async () => {
       try {
-        const me = await refreshUser();
+        let me = await refreshUser();
+        if (cancelled) return;
+        if (!me && typeof window !== 'undefined' && window.sessionStorage) {
+          const userToken = window.sessionStorage.getItem('circleUserToken');
+          const encryptionKey = window.sessionStorage.getItem('circleEncryptionKey');
+          if (userToken && encryptionKey) {
+            try {
+              await authApi.circleLogin(userToken);
+              if (cancelled) return;
+              me = await refreshUser();
+            } catch {
+              const { clearCircleStorage } = await import('../utils/circleSdk');
+              clearCircleStorage();
+            }
+          }
+        }
         if (cancelled) return;
         if (me?.hasCircleUser) {
           await refreshWallets();
@@ -267,7 +282,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUserCredentials(userToken, encryptionKey);
         const result = await circleApi.initializeUser({
           userToken,
-          encryptionKey,
           blockchains: ['ARC-TESTNET'],
           accountType: 'SCA',
         });

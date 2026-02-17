@@ -6,7 +6,6 @@ import { Router, Request, Response } from "express";
 import { createHash } from "crypto";
 import { OAuth2Client } from "google-auth-library";
 import { getSession } from "../utils/getSession";
-import { getCircleUserByGoogleSub, setCircleUserForGoogleSub } from "../store/circleUserStore";
 
 const router = Router();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_WEB_CLIENT_ID;
@@ -53,11 +52,6 @@ router.post("/google", async (req: Request, res: Response) => {
     const session = getSession(req);
     session.googleSub = payload.sub;
     session.email = payload.email ?? undefined;
-    const stored = getCircleUserByGoogleSub(payload.sub);
-    if (stored) {
-      session.circleUserToken = stored.circleUserToken;
-      session.circleEncryptionKey = stored.circleEncryptionKey;
-    }
     await new Promise<void>((resolve, reject) => {
       req.session.save((err) => (err ? reject(err) : resolve()));
     });
@@ -79,16 +73,15 @@ router.post("/google", async (req: Request, res: Response) => {
 
 /**
  * POST /api/auth/circle-login
- * Body: { userToken, encryptionKey } from Circle SDK onLoginComplete (after user signs in with Google via Circle).
- * Creates session so the app has a single "Login with Google" flow; no separate Google ID token needed.
+ * Body: { userToken } from Circle SDK onLoginComplete. encryptionKey is never sent to the server.
  */
 router.post("/circle-login", async (req: Request, res: Response) => {
   try {
-    const { userToken, encryptionKey } = req.body;
-    if (!userToken || !encryptionKey || typeof userToken !== "string" || typeof encryptionKey !== "string") {
+    const { userToken } = req.body;
+    if (!userToken || typeof userToken !== "string") {
       return res.status(400).json({
         success: false,
-        error: "userToken and encryptionKey (strings) are required in body",
+        error: "userToken (string) is required in body",
       });
     }
     const googleSub = circleSubFromUserToken(userToken);
@@ -96,8 +89,6 @@ router.post("/circle-login", async (req: Request, res: Response) => {
     session.googleSub = googleSub;
     session.email = undefined;
     session.circleUserToken = userToken;
-    session.circleEncryptionKey = encryptionKey;
-    setCircleUserForGoogleSub(googleSub, userToken, encryptionKey);
     await new Promise<void>((resolve, reject) => {
       req.session.save((err) => (err ? reject(err) : resolve()));
     });
@@ -128,22 +119,12 @@ router.post("/logout", (req: Request, res: Response) => {
 
 /**
  * GET /api/auth/me
- * Returns current session user. Restores Circle credentials from store if this Google user already has a wallet.
+ * Returns current session user. Circle credentials live only in client sessionStorage.
  */
 router.get("/me", async (req: Request, res: Response) => {
   const session = getSession(req);
   if (!session?.googleSub) {
     return res.status(401).json({ success: false, error: "Not authenticated" });
-  }
-  if (!session.circleUserToken) {
-    const stored = getCircleUserByGoogleSub(session.googleSub);
-    if (stored) {
-      session.circleUserToken = stored.circleUserToken;
-      session.circleEncryptionKey = stored.circleEncryptionKey;
-      await new Promise<void>((resolve, reject) => {
-        req.session.save((err) => (err ? reject(err) : resolve()));
-      });
-    }
   }
   res.json({
     success: true,
