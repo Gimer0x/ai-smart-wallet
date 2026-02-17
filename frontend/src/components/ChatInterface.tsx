@@ -11,7 +11,11 @@ interface Message {
   content: string;
   timestamp: Date;
   pendingAction?: PendingAction;
+  /** True while we wait for tx confirmation (hash) after user signed a transfer */
+  pendingConfirming?: boolean;
   pendingCompleted?: boolean;
+  completedTxHash?: string;
+  completedBlockchain?: string;
 }
 
 interface ChatInterfaceProps {
@@ -27,7 +31,7 @@ export function ChatInterface({ walletId, onPendingComplete, onRequestSignIn }: 
     {
       id: '1',
       role: 'agent',
-      content: 'Hello! I\'m your smart wallet assistant. I can help you purchase e-books, check your balance, and manage your wallet. How can I help you today?',
+      content: 'Hello! I\'m your smart wallet assistant. I can help you check your balance, transfer tokens, and manage your wallet. How can I help you today?',
       timestamp: new Date(),
     },
   ]);
@@ -151,15 +155,57 @@ export function ChatInterface({ walletId, onPendingComplete, onRequestSignIn }: 
             }
           });
         });
+        // Wait for tx confirmation (hash) before showing "Completed"
+        setMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, pendingAction: undefined, pendingConfirming: true } : m))
+        );
+        const maxAttempts = 8;
+        const pollForTxHash = async (attempt = 0) => {
+          const delayMs = attempt === 0 ? 0 : 2000;
+          if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
+          try {
+            const txList = await walletApi.listTransactions(action.walletId, 'OUTBOUND');
+            const sorted = (txList || []).slice().sort((a: { createDate: string }, b: { createDate: string }) =>
+              new Date(b.createDate).getTime() - new Date(a.createDate).getTime()
+            );
+            const latest = sorted[0];
+            if (latest?.txHash) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === messageId
+                    ? {
+                        ...m,
+                        pendingConfirming: false,
+                        pendingCompleted: true,
+                        completedTxHash: latest.txHash,
+                        completedBlockchain: latest.blockchain,
+                      }
+                    : m
+                )
+              );
+              onPendingComplete?.();
+              return;
+            }
+          } catch {
+            // ignore
+          }
+          if (attempt < maxAttempts - 1) {
+            pollForTxHash(attempt + 1);
+          } else {
+            setMessages((prev) =>
+              prev.map((m) => (m.id === messageId ? { ...m, pendingConfirming: false, pendingCompleted: true } : m))
+            );
+            onPendingComplete?.();
+          }
+        };
+        pollForTxHash();
       } else {
-       
         console.log('[Sign & send] Purchase confirmed');
+        setMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, pendingAction: undefined, pendingCompleted: true } : m))
+        );
+        onPendingComplete?.();
       }
-      console.log('[Sign & send] Success – updating UI and calling onPendingComplete');
-      setMessages((prev) =>
-        prev.map((m) => (m.id === messageId ? { ...m, pendingAction: undefined, pendingCompleted: true } : m))
-      );
-      onPendingComplete?.();
     } catch (e) {
       console.error('[Sign & send] Error', e);
       setSignError(e instanceof Error ? e.message : 'Signing failed');
@@ -272,7 +318,21 @@ export function ChatInterface({ walletId, onPendingComplete, onRequestSignIn }: 
                 >
                   <div style={{ whiteSpace: 'pre-wrap' }}>{message.content}</div>
                 </div>
-                {message.role === 'agent' && message.pendingAction && !message.pendingCompleted && (
+                {message.role === 'agent' && message.pendingConfirming && (
+                  <div
+                    style={{
+                      padding: '0.75rem 1rem',
+                      borderRadius: '8px',
+                      border: '1px solid var(--primary)',
+                      background: 'rgba(99, 102, 241, 0.06)',
+                      fontSize: '0.875rem',
+                      color: 'var(--secondary)',
+                    }}
+                  >
+                    Confirming transaction…
+                  </div>
+                )}
+                {message.role === 'agent' && message.pendingAction && !message.pendingCompleted && !message.pendingConfirming && (
                   <div
                     style={{
                       padding: '0.75rem 1rem',
@@ -330,7 +390,21 @@ export function ChatInterface({ walletId, onPendingComplete, onRequestSignIn }: 
                   </div>
                 )}
                 {message.role === 'agent' && message.pendingCompleted && (
-                  <div style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 500 }}>✓ Completed</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 500 }}>
+                    <div>✓ Completed</div>
+                    {message.completedTxHash && (
+                      <div style={{ marginTop: '4px', fontSize: '0.75rem', color: 'var(--secondary)', fontWeight: 400 }}>
+                        <a
+                          href={`https://testnet.arcscan.app/tx/${message.completedTxHash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: 'var(--primary)', textDecoration: 'underline', wordBreak: 'break-all' }}
+                        >
+                          View on explorer: {message.completedTxHash.substring(0, 10)}…{message.completedTxHash.slice(-8)}
+                        </a>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
               {message.role === 'user' && (

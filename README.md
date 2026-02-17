@@ -13,7 +13,6 @@ This project combines:
 The AI agent can:
 - ✅ Check wallet balances and transaction history
 - ✅ Transfer USDC tokens to any address
-- ✅ Browse and purchase e-books from a marketplace
 - ✅ Answer questions about wallet status and transactions
 - ✅ Execute transactions autonomously based on user requests
 
@@ -165,31 +164,13 @@ The main interface includes a chat where you can interact with your wallet using
    
    ![question 3](./UI/question-3.png)
 
-4. **Browse Marketplace:**
-   - "List the e-books available for purchase"
-   
-   ![question 4](./UI/question-4.png)
-
-5. **Purchase E-books:**
-   - "Purchase for me 'Metaverse Development' by Rachel Weisz"
-   - "Buy 'Crypto Trading Strategies' by Penelope Cruz"
-   
-   ![question 5](./UI/question-5.png)
-
-6. **View Transactions:**
+4. **View Transactions:**
    - "List for me all transactions"
    - "Show my transaction history"
    
    ![question 6](./UI/question-6.png)
 
-### Marketplace
 
-Navigate to the **Marketplace** tab to browse available e-books. The marketplace displays:
-- E-book titles, authors, and descriptions
-- Prices in USDC
-- Purchase status (shows "✓ Purchased" for owned items)
-
-![marketplace](./UI/marketplace.png)
 
 ## 🏗️ Project Structure
 
