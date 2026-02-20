@@ -145,9 +145,14 @@ export const walletApi = {
 };
 
 // --- Chat ---
-export type PendingAction =
-  | { type: 'transfer'; walletId: string; tokenId: string; destinationAddress: string; amount: string; feeLevel?: string }
-  | { type: 'purchase'; walletId: string; ebookId: string };
+export type PendingAction = {
+  type: 'transfer';
+  walletId: string;
+  tokenId: string;
+  destinationAddress: string;
+  amount: string;
+  feeLevel?: string;
+};
 
 export const chatApi = {
   sendMessage: async (message: string, walletId?: string): Promise<{ response: string; timestamp?: string; pendingAction?: PendingAction }> => {

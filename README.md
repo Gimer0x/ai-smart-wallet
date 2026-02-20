@@ -1,6 +1,6 @@
 # Wallet-Integrated AI: Autonomous Smart Wallet Agent
 
-An AI-powered autonomous wallet system that uses USDC on ARC Testnet to perform transactions on your behalf. This project demonstrates how to build a smart wallet agent that can autonomously purchase items from a marketplace, check balances, transfer tokens, and manage transactions through natural language conversations.
+An AI-powered autonomous guardian for a wallet system that uses USDC on ARC Testnet to perform transactions on your behalf. This project demonstrates how to build a smart wallet agent that can check balances, transfer tokens, and manage transactions through natural language conversations.
 
 ## Overview
 
@@ -47,14 +47,12 @@ User wallets are created and controlled by users (Google sign-in + Circle). No E
 1. **Circle API Key:** Get `CIRCLE_API_KEY` from [Circle Console](https://console.circle.com/).
 2. **Google OAuth:** Configure `GOOGLE_CLIENT_ID` (or `GOOGLE_WEB_CLIENT_ID`) for session auth.
 3. **Groq:** Set `GROQ_API_KEY` for the AI agent.
-4. **Marketplace:** Set `MARKETPLACE_WALLET_ADDRESS` to the address that should receive USDC from purchases (any address you control).
 
 Example `backend/.env`:
 ```env
 CIRCLE_API_KEY=your_circle_api_key
 GOOGLE_CLIENT_ID=your_google_web_client_id
 GROQ_API_KEY=your_groq_api_key
-MARKETPLACE_WALLET_ADDRESS=0x...   # Receives purchase payments
 SESSION_SECRET=your_session_secret
 ```
 
@@ -179,7 +177,6 @@ wallet-intergrated-ai/
 ├── backend/
 │   ├── src/
 │   │   ├── agent/              # AI agent (Groq + LangChain)
-│   │   ├── marketplace/        # E-book marketplace logic
 │   │   ├── routes/             # API routes
 │   │   └── ...
 │   └── .env.example

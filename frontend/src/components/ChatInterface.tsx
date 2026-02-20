@@ -94,7 +94,8 @@ export function ChatInterface({ walletId, onPendingComplete, onRequestSignIn }: 
   };
 
   const handleSignPendingAction = async (messageId: string, action: PendingAction) => {
-    console.log('[Sign & send] Clicked', { messageId, actionType: action.type, action });
+    if (action.type !== 'transfer') return;
+    console.log('[Sign & send] Clicked', { messageId, action });
     setSignError(null);
     const creds = getStoredCredentials();
     const hasDevice = !!(creds?.deviceToken && creds?.deviceEncryptionKey);
@@ -135,77 +136,69 @@ export function ChatInterface({ walletId, onPendingComplete, onRequestSignIn }: 
       const sdk = getCircleSdk(CIRCLE_APP_ID, GOOGLE_CLIENT_ID, creds.deviceToken, creds.deviceEncryptionKey);
       sdk.setAuthentication({ userToken: creds.userToken, encryptionKey: creds.encryptionKey });
       console.log('[Sign & send] SDK created and authentication set');
-      if (action.type === 'transfer') {
-        console.log('[Sign & send] Preparing transfer...', { walletId: action.walletId, amount: action.amount, destination: action.destinationAddress });
-        const { challengeId } = await walletApi.prepareTransfer(action.walletId, {
-          tokenId: action.tokenId,
-          destinationAddress: action.destinationAddress,
-          amount: action.amount,
-          feeLevel: action.feeLevel,
-        });
-        console.log('[Sign & send] Got challengeId, executing challenge...', { challengeId });
-        await new Promise<void>((resolve, reject) => {
-          sdk.execute(challengeId, (err: unknown) => {
-            if (err) {
-              console.error('[Sign & send] SDK execute error', err);
-              reject(new Error((err as Error).message || 'Signing failed'));
-            } else {
-              console.log('[Sign & send] Challenge completed successfully');
-              resolve();
-            }
-          });
-        });
-        // Wait for tx confirmation (hash) before showing "Completed"
-        setMessages((prev) =>
-          prev.map((m) => (m.id === messageId ? { ...m, pendingAction: undefined, pendingConfirming: true } : m))
-        );
-        const maxAttempts = 8;
-        const pollForTxHash = async (attempt = 0) => {
-          const delayMs = attempt === 0 ? 0 : 2000;
-          if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
-          try {
-            const txList = await walletApi.listTransactions(action.walletId, 'OUTBOUND');
-            const sorted = (txList || []).slice().sort((a: { createDate: string }, b: { createDate: string }) =>
-              new Date(b.createDate).getTime() - new Date(a.createDate).getTime()
-            );
-            const latest = sorted[0];
-            if (latest?.txHash) {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === messageId
-                    ? {
-                        ...m,
-                        pendingConfirming: false,
-                        pendingCompleted: true,
-                        completedTxHash: latest.txHash,
-                        completedBlockchain: latest.blockchain,
-                      }
-                    : m
-                )
-              );
-              onPendingComplete?.();
-              return;
-            }
-          } catch {
-            // ignore
-          }
-          if (attempt < maxAttempts - 1) {
-            pollForTxHash(attempt + 1);
+      console.log('[Sign & send] Preparing transfer...', { walletId: action.walletId, amount: action.amount, destination: action.destinationAddress });
+      const { challengeId } = await walletApi.prepareTransfer(action.walletId, {
+        tokenId: action.tokenId,
+        destinationAddress: action.destinationAddress,
+        amount: action.amount,
+        feeLevel: action.feeLevel,
+      });
+      console.log('[Sign & send] Got challengeId, executing challenge...', { challengeId });
+      await new Promise<void>((resolve, reject) => {
+        sdk.execute(challengeId, (err: unknown) => {
+          if (err) {
+            console.error('[Sign & send] SDK execute error', err);
+            reject(new Error((err as Error).message || 'Signing failed'));
           } else {
+            console.log('[Sign & send] Challenge completed successfully');
+            resolve();
+          }
+        });
+      });
+      // Wait for tx confirmation (hash) before showing "Completed"
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, pendingAction: undefined, pendingConfirming: true } : m))
+      );
+      const maxAttempts = 8;
+      const pollForTxHash = async (attempt = 0) => {
+        const delayMs = attempt === 0 ? 0 : 2000;
+        if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
+        try {
+          const txList = await walletApi.listTransactions(action.walletId, 'OUTBOUND');
+          const sorted = (txList || []).slice().sort((a: { createDate: string }, b: { createDate: string }) =>
+            new Date(b.createDate).getTime() - new Date(a.createDate).getTime()
+          );
+          const latest = sorted[0];
+          if (latest?.txHash) {
             setMessages((prev) =>
-              prev.map((m) => (m.id === messageId ? { ...m, pendingConfirming: false, pendingCompleted: true } : m))
+              prev.map((m) =>
+                m.id === messageId
+                  ? {
+                      ...m,
+                      pendingConfirming: false,
+                      pendingCompleted: true,
+                      completedTxHash: latest.txHash,
+                      completedBlockchain: latest.blockchain,
+                    }
+                  : m
+              )
             );
             onPendingComplete?.();
+            return;
           }
-        };
-        pollForTxHash();
-      } else {
-        console.log('[Sign & send] Purchase confirmed');
-        setMessages((prev) =>
-          prev.map((m) => (m.id === messageId ? { ...m, pendingAction: undefined, pendingCompleted: true } : m))
-        );
-        onPendingComplete?.();
-      }
+        } catch {
+          // ignore
+        }
+        if (attempt < maxAttempts - 1) {
+          pollForTxHash(attempt + 1);
+        } else {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === messageId ? { ...m, pendingConfirming: false, pendingCompleted: true } : m))
+          );
+          onPendingComplete?.();
+        }
+      };
+      pollForTxHash();
     } catch (e) {
       console.error('[Sign & send] Error', e);
       setSignError(e instanceof Error ? e.message : 'Signing failed');
@@ -332,7 +325,7 @@ export function ChatInterface({ walletId, onPendingComplete, onRequestSignIn }: 
                     Confirming transaction…
                   </div>
                 )}
-                {message.role === 'agent' && message.pendingAction && !message.pendingCompleted && !message.pendingConfirming && (
+                {message.role === 'agent' && message.pendingAction?.type === 'transfer' && !message.pendingCompleted && !message.pendingConfirming && (
                   <div
                     style={{
                       padding: '0.75rem 1rem',
@@ -342,13 +335,9 @@ export function ChatInterface({ walletId, onPendingComplete, onRequestSignIn }: 
                       fontSize: '0.875rem',
                     }}
                   >
-                    {message.pendingAction.type === 'transfer' ? (
-                      <span>
-                        Send {message.pendingAction.amount} USDC to {message.pendingAction.destinationAddress.slice(0, 10)}…
-                      </span>
-                    ) : (
-                      <span>Purchase e-book {message.pendingAction.ebookId}</span>
-                    )}
+                    <span>
+                      Send {message.pendingAction.amount} USDC to {message.pendingAction.destinationAddress.slice(0, 10)}…
+                    </span>
                     <div style={{ marginTop: '0.5rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
                       <button
                         type="button"
@@ -364,7 +353,7 @@ export function ChatInterface({ walletId, onPendingComplete, onRequestSignIn }: 
                           cursor: signingMessageId === message.id ? 'not-allowed' : 'pointer',
                         }}
                       >
-                        {signingMessageId === message.id ? 'Opening…' : message.pendingAction!.type === 'transfer' ? 'Sign & send' : 'Sign & pay'}
+                        {signingMessageId === message.id ? 'Opening…' : 'Sign & send'}
                       </button>
                       {signError && (signingMessageId === message.id || signNeedsCredsMessageId === message.id) && (
                         <span style={{ color: '#c33', fontSize: '0.75rem' }}>{signError}</span>

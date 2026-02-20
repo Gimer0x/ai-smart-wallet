@@ -20,20 +20,14 @@ export interface AgentConfig {
   model?: string;
 }
 
-/** Pending action returned by transfer/purchase tools; frontend uses it to show Sign UI and call prepare endpoints */
-export type PendingAction =
-  | {
-      type: 'transfer';
-      walletId: string;
-      tokenId: string;
-      destinationAddress: string;
-      amount: string;
-      feeLevel?: string;
-    }
-  | {
-      type: 'purchase';
-      walletId: string;
-      ebookId: string;
-    };
+/** Pending action returned by transfer tool; frontend uses it to show Sign UI and call prepare endpoint */
+export type PendingAction = {
+  type: 'transfer';
+  walletId: string;
+  tokenId: string;
+  destinationAddress: string;
+  amount: string;
+  feeLevel?: string;
+};
 
 export const PENDING_ACTION_MARKER = '__PENDING_ACTION__';

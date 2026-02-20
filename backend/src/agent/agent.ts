@@ -7,7 +7,7 @@
 import { ChatGroq } from "@langchain/groq";
 import { HumanMessage, AIMessage, SystemMessage, ToolMessage } from "@langchain/core/messages";
 import dotenv from "dotenv";
-import { AgentConfig, PendingAction, PENDING_ACTION_MARKER } from "./types";
+import { PendingAction, PENDING_ACTION_MARKER } from "./types";
 
 dotenv.config();
 
@@ -36,13 +36,11 @@ export function createGroqModel(temperature: number = 0) {
  * System Prompt for the Smart Wallet Agent
  */
 const createSystemPrompt = (primaryWalletId?: string) => {
-  const walletInfo = primaryWalletId 
-    ? `\n\nIMPORTANT: The primary wallet ID is ${primaryWalletId}. When users ask about "which wallet" or "connected wallet", you MUST use the get_wallet_info tool with this wallet ID to get the actual wallet address and details. Always use this wallet ID for balance checks and purchases unless the user specifies otherwise.`
+  const walletInfo = primaryWalletId
+    ? `\n\nIMPORTANT: The primary wallet ID is ${primaryWalletId}. When users ask about "which wallet" or "connected wallet", you MUST use the get_wallet_info tool with this wallet ID to get the actual wallet address and details. Always use this wallet ID for balance checks and transfers unless the user specifies otherwise.`
     : '';
-  
-  return `You are a smart wallet assistant. Users can ask you to purchase e-books from the marketplace, check balances, view transactions, and transfer tokens.
 
-CRITICAL: When users ask you to list, show, or display e-books, you MUST use the browse_ebooks tool immediately. Do NOT just tell them you can list e-books - actually call the tool and display the results.
+  return `You are a smart wallet assistant. Users can ask you to check balances, view transactions, and transfer tokens.
 
 You have access to the following capabilities:
 - Check wallet balance (use check_wallet_balance tool)
@@ -50,37 +48,21 @@ You have access to the following capabilities:
 - List transactions with optional filters (use list_transactions tool)
 - Get specific transaction details by ID (use get_transaction tool)
 - Transfer tokens/USDC to other addresses (use transfer_tokens tool)
-- Browse available e-books in the marketplace (use browse_ebooks tool) - USE THIS when asked to list/show e-books
-- Search for e-books by title/author (use search_ebooks tool)
-- Get e-book price and details (use get_ebook_price tool)
-- Purchase e-books using USDC (use purchase_ebook tool)
 
 Important rules:
 1. When asked about which wallet you're connected to, ALWAYS use the get_wallet_info tool to get the actual wallet address and return it to the user
 2. When checking balance, ALWAYS use the check_wallet_balance tool - never guess or make up balance amounts
 3. When listing transactions, use list_transactions tool with appropriate filters if needed
 4. When getting transaction details, use get_transaction tool with the transaction ID
-5. When users ask to "list e-books", "show e-books", "what e-books are available", or similar requests to see all e-books:
-   - IMMEDIATELY use the browse_ebooks tool to get the complete list
-   - Display the full list returned by the tool to the user
-   - Do NOT just say you can list them - actually call the tool and show the results
-6. When users search for specific e-books, use search_ebooks tool with their query
-7. When transferring tokens:
+5. When transferring tokens:
    - FIRST check the wallet balance using check_wallet_balance to get the token ID and verify sufficient funds
    - Use the token ID from the balance check in the transfer_tokens tool
    - Verify the destination address is correct before transferring
    - Always confirm the transfer was initiated and provide the transaction ID
-8. When purchasing e-books:
-   - FIRST browse or search e-books to find what the user wants
-   - Get the e-book price using get_ebook_price tool
-   - Check wallet balance to get the token ID and verify sufficient funds
-   - Use purchase_ebook tool with wallet ID, e-book ID, and token ID
-9. Always check the wallet balance before attempting to purchase anything
-10. Confirm the price of the e-book before purchasing
-11. Only proceed with purchases or transfers if the wallet has sufficient balance
-12. Provide clear, friendly responses to users with actual data from the tools
-13. Confirm purchases and transfers clearly with transaction details when completed
-14. Never hallucinate or make up wallet addresses, balances, transaction details, or e-book lists - always use the tools to get real data${walletInfo}
+6. Only proceed with transfers if the wallet has sufficient balance
+7. Provide clear, friendly responses to users with actual data from the tools
+8. Confirm transfers clearly with transaction details when completed
+9. Never hallucinate or make up wallet addresses, balances, or transaction details - always use the tools to get real data${walletInfo}
 
 Be helpful, concise, and always prioritize user safety and wallet security.`;
 };
@@ -95,7 +77,7 @@ function extractPendingAction(content: string): PendingAction | null {
   try {
     const json = afterStart.slice(0, end).trim();
     const parsed = JSON.parse(json) as PendingAction;
-    if (parsed.type === "transfer" || parsed.type === "purchase") return parsed;
+    if (parsed.type === "transfer") return parsed;
   } catch {
     // ignore
   }
@@ -233,13 +215,6 @@ export async function processMessage(
 
     const toolMessages = messages.filter((m: any) => m instanceof ToolMessage);
     const lastToolMessage = toolMessages[toolMessages.length - 1];
-
-    if (lastToolMessage && finalContentStr && !finalContentStr.includes('Available E-Books')) {
-      const toolResult = lastToolMessage.content as string;
-      if (toolResult.includes('Available E-Books') || toolResult.includes('ebook')) {
-        finalContentStr = `${finalContentStr}\n\n${toolResult}`;
-      }
-    }
 
     if ((!finalContentStr || finalContentStr.trim() === '') && lastToolMessage) {
       finalContentStr = lastToolMessage.content as string;
