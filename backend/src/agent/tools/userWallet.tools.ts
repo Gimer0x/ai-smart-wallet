@@ -77,14 +77,37 @@ export function createUserWalletTools(userToken: string) {
           txType: transactionType,
           state,
         });
-        const transactions = res.data.transactions || [];
-        if (transactions.length === 0) {
+        const rawTransactions = res.data.transactions || [];
+        if (rawTransactions.length === 0) {
           return "No transactions found for this wallet.";
         }
+        // Fetch full details for each tx to get txHash when list response doesn't include it (so we can show explorer link)
+        type TxWithHash = (typeof rawTransactions)[number] & { txHash?: string };
+        const enriched: TxWithHash[] = await Promise.all(
+          rawTransactions.slice(0, 15).map(async (tx: TxWithHash) => {
+            const hash = tx.txHash ?? (tx as { tx_hash?: string }).tx_hash;
+            if (hash) return { ...tx, txHash: hash };
+            try {
+              const full = await getTransaction(userToken, tx.id);
+              const h = full.data.transaction.txHash ?? (full.data.transaction as { tx_hash?: string }).tx_hash;
+              return { ...tx, txHash: h };
+            } catch {
+              return tx;
+            }
+          })
+        );
+        const rest = rawTransactions.slice(15) as TxWithHash[];
+        const transactions = [...enriched, ...rest];
+        const ARC_EXPLORER = "https://testnet.arcscan.app/tx/";
+
         const list = transactions
           .map(
-            (tx: { transactionType: string; amounts: string[]; blockchain: string; state: string; sourceAddress?: string; destinationAddress?: string; createDate: string; id: string }, i: number) =>
-              `${i + 1}. ${tx.transactionType} - ${tx.amounts.join(", ")} ${tx.blockchain}\n   State: ${tx.state}\n   From: ${tx.sourceAddress || "N/A"}\n   To: ${tx.destinationAddress || "N/A"}\n   Date: ${new Date(tx.createDate).toLocaleString()}\n   Transaction ID: ${tx.id}`
+            (tx: { transactionType: string; amounts: string[]; blockchain: string; state: string; sourceAddress?: string; destinationAddress?: string; createDate: string; id: string; txHash?: string; symbol?: string; token?: { symbol?: string } }, i: number) => {
+              const symbol = tx.symbol ?? tx.token?.symbol ?? "USDC";
+              const hash = tx.txHash ?? (tx as { tx_hash?: string }).tx_hash;
+              const txLink = hash ? `\n   Explorer: transaction details\n   ${ARC_EXPLORER}${hash}` : "";
+              return `${i + 1}. ${tx.transactionType} - ${tx.amounts.join(", ")} ${symbol} on ${tx.blockchain}\n    State: ${tx.state}\n    From: ${tx.sourceAddress || "N/A"}\n    To: ${tx.destinationAddress || "N/A"}\n    Date: ${new Date(tx.createDate).toLocaleString()}\n    Transaction ID: ${tx.id}`;
+            }
           )
           .join("\n\n");
         return `Transactions (${transactions.length}):\n\n${list}`;
@@ -104,16 +127,17 @@ export function createUserWalletTools(userToken: string) {
     func: async ({ transactionId }) => {
       try {
         const res = await getTransaction(userToken, transactionId);
-        const tx = res.data.transaction;
+        const tx = res.data.transaction as { id: string; transactionType: string; state: string; blockchain: string; amounts: string[]; sourceAddress?: string; destinationAddress?: string; createDate: string; updateDate: string; walletId: string; txHash?: string; symbol?: string; token?: { symbol?: string } };
+        const symbol = tx.symbol ?? tx.token?.symbol ?? "USDC";
         const txHash = tx.txHash
-          ? `\nTransaction Hash: ${tx.txHash}\nExplorer: https://testnet.arcscan.app/tx/${tx.txHash}`
+          ? `\nTransaction Hash: ${tx.txHash}\nExplorer: transaction details\nhttps://testnet.arcscan.app/tx/${tx.txHash}`
           : "";
         return `Transaction Details:
 ID: ${tx.id}
 Type: ${tx.transactionType}
 State: ${tx.state}
 Blockchain: ${tx.blockchain}
-Amount: ${tx.amounts.join(", ")}
+Amount: ${tx.amounts.join(", ")} ${symbol}
 From: ${tx.sourceAddress || "N/A"}
 To: ${tx.destinationAddress || "N/A"}
 Created: ${new Date(tx.createDate).toLocaleString()}

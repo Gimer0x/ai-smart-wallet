@@ -5,6 +5,27 @@ import { getCircleSdk, getStoredCredentials } from '../utils/circleSdk';
 const CIRCLE_APP_ID = import.meta.env.VITE_CIRCLE_APP_ID;
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
+/** Turn URLs in text into clickable links */
+function linkifyContent(text: string): React.ReactNode {
+  const urlRegex = /(https:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, i) =>
+    part.startsWith('https://') ? (
+      <a
+        key={i}
+        href={part}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: 'var(--primary)', textDecoration: 'underline', wordBreak: 'break-all' }}
+      >
+        {part}
+      </a>
+    ) : (
+      part
+    )
+  );
+}
+
 interface Message {
   id: string;
   role: 'user' | 'agent';
@@ -309,7 +330,7 @@ export function ChatInterface({ walletId, onPendingComplete, onRequestSignIn }: 
                     boxShadow: message.role === 'user' ? '0 1px 2px rgba(99, 102, 241, 0.2)' : '0 1px 2px rgba(0, 0, 0, 0.05)',
                   }}
                 >
-                  <div style={{ whiteSpace: 'pre-wrap' }}>{message.content}</div>
+                  <div style={{ whiteSpace: 'pre-wrap' }}>{linkifyContent(message.content)}</div>
                 </div>
                 {message.role === 'agent' && message.pendingConfirming && (
                   <div
