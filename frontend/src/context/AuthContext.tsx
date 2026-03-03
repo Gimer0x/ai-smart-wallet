@@ -9,6 +9,8 @@ import {
 } from 'react';
 import { authApi, circleApi, walletApi, type MeData, type Wallet } from '../services/api';
 
+export const BLOCKCHAINS = ['ARC-TESTNET','BASE-SEPOLIA'];
+
 type AuthState = {
   user: MeData | null;
   wallets: Wallet[];
@@ -282,7 +284,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUserCredentials(userToken, encryptionKey);
         const result = await circleApi.initializeUser({
           userToken,
-          blockchains: ['BASE-SEPOLIA', 'ARC-TESTNET'],
+          blockchains: BLOCKCHAINS,
           accountType: 'SCA',
         });
         await refreshUser();

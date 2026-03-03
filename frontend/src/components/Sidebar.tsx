@@ -1,5 +1,6 @@
 import type { Wallet } from '../services/api';
 import type { MeData } from '../services/api';
+import { BLOCKCHAINS } from '../context/AuthContext';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -62,6 +63,27 @@ export function Sidebar({
           </div>
 
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <select
+              style={{
+                padding: '0.5rem 0.75rem',
+                borderRadius: '8px',
+                border: '1px solid rgba(255,255,255,0.2)',
+                background: 'rgba(255,255,255,0.08)',
+                color: 'white',
+                fontSize: '0.875rem',
+                width: '100%',
+                marginBottom: '0.25rem',
+                cursor: 'pointer',
+              }}
+              defaultValue={BLOCKCHAINS[0]}
+              aria-label="Blockchain"
+            >
+              {BLOCKCHAINS.map((chain) => (
+                <option key={chain} value={chain} style={{ background: '#1e293b', color: 'white' }}>
+                  {chain}
+                </option>
+              ))}
+            </select>
             <button
               onClick={() => onNavigate('chat')}
               className={`nav-button ${currentView === 'chat' ? 'nav-active' : ''}`}
