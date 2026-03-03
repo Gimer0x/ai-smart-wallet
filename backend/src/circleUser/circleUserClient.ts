@@ -15,7 +15,7 @@ import type {
   CircleTransferChallengeResponse,
 } from "./types";
 
-const CIRCLE_BASE_URL = process.env.CIRCLE_BASE_URL || "https://api.circle.com";
+const CIRCLE_ARC_URL = process.env.CIRCLE_ARC_URL || "https://api.circle.com";
 const CIRCLE_API_KEY = process.env.CIRCLE_API_KEY;
 
 function getAuthHeader(): string {
@@ -34,7 +34,7 @@ function idempotencyKey(): string {
  * Frontend sends deviceId from Circle SDK; we return deviceToken + deviceEncryptionKey.
  */
 export async function createDeviceToken(deviceId: string): Promise<CircleDeviceTokenResponse> {
-  const res = await fetch(`${CIRCLE_BASE_URL}/v1/w3s/users/social/token`, {
+  const res = await fetch(`${CIRCLE_ARC_URL}/v1/w3s/users/social/token`, {
     method: "POST",
     headers: {
       Authorization: getAuthHeader(),
@@ -73,7 +73,7 @@ export async function initializeUser(
   };
   if (options?.metadata?.length) body.metadata = options.metadata;
 
-  const res = await fetch(`${CIRCLE_BASE_URL}/v1/w3s/user/initialize`, {
+  const res = await fetch(`${CIRCLE_ARC_URL}/v1/w3s/user/initialize`, {
     method: "POST",
     headers: {
       Authorization: getAuthHeader(),
@@ -104,7 +104,7 @@ export async function initializeUser(
  * List wallets for the user identified by userToken.
  */
 export async function listWallets(userToken: string): Promise<CircleListWalletsResponse> {
-  const res = await fetch(`${CIRCLE_BASE_URL}/v1/w3s/wallets`, {
+  const res = await fetch(`${CIRCLE_ARC_URL}/v1/w3s/wallets`, {
     method: "GET",
     headers: {
       Authorization: getAuthHeader(),
@@ -128,7 +128,7 @@ export async function getWalletBalance(
   userToken: string,
   walletId: string
 ): Promise<CircleWalletBalanceResponse> {
-  const res = await fetch(`${CIRCLE_BASE_URL}/v1/w3s/wallets/${encodeURIComponent(walletId)}/balances`, {
+  const res = await fetch(`${CIRCLE_ARC_URL}/v1/w3s/wallets/${encodeURIComponent(walletId)}/balances`, {
     method: "GET",
     headers: {
       Authorization: getAuthHeader(),
@@ -152,7 +152,7 @@ export async function getWallet(
   userToken: string,
   walletId: string
 ): Promise<CircleGetWalletResponse> {
-  const res = await fetch(`${CIRCLE_BASE_URL}/v1/w3s/wallets/${encodeURIComponent(walletId)}`, {
+  const res = await fetch(`${CIRCLE_ARC_URL}/v1/w3s/wallets/${encodeURIComponent(walletId)}`, {
     method: "GET",
     headers: {
       Authorization: getAuthHeader(),
@@ -187,7 +187,7 @@ export async function listTransactions(
   if (params?.pageSize) searchParams.set("pageSize", String(params.pageSize));
   const query = searchParams.toString() ? `?${searchParams.toString()}` : "";
 
-  const res = await fetch(`${CIRCLE_BASE_URL}/v1/w3s/transactions${query}`, {
+  const res = await fetch(`${CIRCLE_ARC_URL}/v1/w3s/transactions${query}`, {
     method: "GET",
     headers: {
       Authorization: getAuthHeader(),
@@ -211,7 +211,7 @@ export async function getTransaction(
   transactionId: string
 ): Promise<CircleGetTransactionResponse> {
   const res = await fetch(
-    `${CIRCLE_BASE_URL}/v1/w3s/transactions/${encodeURIComponent(transactionId)}`,
+    `${CIRCLE_ARC_URL}/v1/w3s/transactions/${encodeURIComponent(transactionId)}`,
     {
       method: "GET",
       headers: {
@@ -243,7 +243,7 @@ export async function createTransferChallenge(
     feeLevel?: "LOW" | "MEDIUM" | "HIGH";
   }
 ): Promise<CircleTransferChallengeResponse> {
-  const res = await fetch(`${CIRCLE_BASE_URL}/v1/w3s/user/transactions/transfer`, {
+  const res = await fetch(`${CIRCLE_ARC_URL}/v1/w3s/user/transactions/transfer`, {
     method: "POST",
     headers: {
       Authorization: getAuthHeader(),
