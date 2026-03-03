@@ -69,7 +69,7 @@ export async function initializeUser(
   const body: Record<string, unknown> = {
     idempotencyKey: idempotencyKey(),
     accountType: options?.accountType ?? "EOA",
-    blockchains: options?.blockchains ?? ["ARC-TESTNET"],
+    blockchains: options?.blockchains ?? ["BASE-SEPOLIA"],
   };
   if (options?.metadata?.length) body.metadata = options.metadata;
 

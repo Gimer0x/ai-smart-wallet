@@ -58,7 +58,7 @@ router.post("/initialize-user", requireAuth, async (req: Request, res: Response)
     try {
       const result = await initializeUser(userToken, {
         accountType: accountType === "SCA" ? "SCA" : "EOA",
-        blockchains: Array.isArray(blockchains) ? blockchains : ["ARC-TESTNET"],
+        blockchains: Array.isArray(blockchains) ? blockchains : ["BASE-SEPOLIA"],
       });
 
       session.circleUserToken = userToken;

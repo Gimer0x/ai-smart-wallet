@@ -282,7 +282,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUserCredentials(userToken, encryptionKey);
         const result = await circleApi.initializeUser({
           userToken,
-          blockchains: ['ARC-TESTNET'],
+          blockchains: ['BASE-SEPOLIA', 'ARC-TESTNET'],
           accountType: 'SCA',
         });
         await refreshUser();

@@ -44,7 +44,7 @@ export function TransactionList({ walletId, transactionType }: TransactionListPr
   };
 
   const getExplorerUrl = (blockchain: string, txHash: string) => {
-    if (blockchain === 'ARC-TESTNET') {
+    if (blockchain === 'BASE-SEPOLIA') {
       return `https://testnet.arcscan.app/tx/${txHash}`;
     } else if (blockchain.includes('MATIC')) {
       return `https://amoy.polygonscan.com/tx/${txHash}`;
