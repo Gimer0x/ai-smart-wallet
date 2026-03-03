@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { chatApi, walletApi, type PendingAction } from '../services/api';
+import { getExplorerTxUrl } from '../utils/explorer';
 import { getCircleSdk, getStoredCredentials } from '../utils/circleSdk';
 
 const CIRCLE_APP_ID = import.meta.env.VITE_CIRCLE_APP_ID;
@@ -405,7 +406,7 @@ export function ChatInterface({ walletId, onPendingComplete, onRequestSignIn }: 
                     {message.completedTxHash && (
                       <div style={{ marginTop: '4px', fontSize: '0.75rem', color: 'var(--secondary)', fontWeight: 400 }}>
                         <a
-                          href={`https://testnet.arcscan.app/tx/${message.completedTxHash}`}
+                          href={getExplorerTxUrl(message.completedBlockchain ?? 'ARC-TESTNET', message.completedTxHash) ?? '#'}
                           target="_blank"
                           rel="noopener noreferrer"
                           style={{ color: 'var(--primary)', textDecoration: 'underline', wordBreak: 'break-all' }}

@@ -6,7 +6,7 @@ import { ChatInterface } from './components/ChatInterface';
 import { DashboardView } from './components/DashboardView';
 
 function App() {
-  const { user, wallets, selectedWalletId, setSelectedWalletId, initialCheckDone, loading, error: authError, logout, refreshWallets, startCircleWalletCreation } = useAuth();
+  const { user, wallets, selectedWalletId, setSelectedWalletId, selectedBlockchain, setSelectedBlockchain, createWalletForBlockchain, executeChallengeAndFinish, initialCheckDone, loading, error: authError, logout, refreshWallets, startCircleWalletCreation } = useAuth();
   const [currentView, setCurrentView] = useState('chat');
   const [refreshKey, setRefreshKey] = useState(0);
   const [loginRedirecting, setLoginRedirecting] = useState(false);
@@ -83,6 +83,10 @@ function App() {
         onNavigate={handleNavigate}
         currentView={currentView}
         selectedWalletId={selectedWalletId}
+        selectedBlockchain={selectedBlockchain}
+        setSelectedBlockchain={setSelectedBlockchain}
+        createWalletForBlockchain={createWalletForBlockchain}
+        executeChallengeAndFinish={executeChallengeAndFinish}
         wallets={wallets}
         onSelectWallet={setSelectedWalletId}
         user={user}

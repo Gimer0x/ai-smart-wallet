@@ -7,6 +7,10 @@ interface SidebarProps {
   onNavigate: (view: string) => void;
   currentView: string;
   selectedWalletId: string | null;
+  selectedBlockchain: string;
+  setSelectedBlockchain: (blockchain: string) => void;
+  createWalletForBlockchain: (blockchain: string) => Promise<string | undefined>;
+  executeChallengeAndFinish: (challengeId: string) => Promise<void>;
   wallets: Wallet[];
   onSelectWallet?: (walletId: string) => void;
   user: MeData | null;
@@ -21,6 +25,10 @@ export function Sidebar({
   onNavigate,
   currentView,
   selectedWalletId,
+  selectedBlockchain,
+  setSelectedBlockchain,
+  createWalletForBlockchain,
+  executeChallengeAndFinish,
   wallets,
   onSelectWallet,
   user,
@@ -29,6 +37,24 @@ export function Sidebar({
   onLogout,
   onCreateWallet,
 }: SidebarProps) {
+  const handleBlockchainChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const chain = e.target.value;
+    setSelectedBlockchain(chain);
+    const walletForChain = wallets.find((w) => w.blockchain === chain);
+    if (walletForChain) {
+      onSelectWallet?.(walletForChain.id);
+      return;
+    }
+    try {
+      const challengeId = await createWalletForBlockchain(chain);
+      if (challengeId) {
+        await executeChallengeAndFinish(challengeId);
+      }
+    } catch (err) {
+      console.error('Create wallet for blockchain failed:', err);
+    }
+  };
+
   return (
     <>
       <div
@@ -64,6 +90,8 @@ export function Sidebar({
 
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <select
+              value={selectedBlockchain}
+              onChange={handleBlockchainChange}
               style={{
                 padding: '0.5rem 0.75rem',
                 borderRadius: '8px',
@@ -75,7 +103,6 @@ export function Sidebar({
                 marginBottom: '0.25rem',
                 cursor: 'pointer',
               }}
-              defaultValue={BLOCKCHAINS[0]}
               aria-label="Blockchain"
             >
               {BLOCKCHAINS.map((chain) => (

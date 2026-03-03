@@ -15,6 +15,12 @@ export interface CircleInitializeUserResponse {
   };
 }
 
+export interface CircleCreateUserWalletResponse {
+  data: {
+    challengeId: string;
+  };
+}
+
 export interface CircleWallet {
   id: string;
   address: string;

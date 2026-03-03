@@ -95,6 +95,13 @@ export const circleApi = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  /** Create wallet on given blockchain(s) for existing Circle user. Returns challengeId to execute in app. */
+  createWallet: (body: { blockchains: string[]; accountType?: 'SCA' | 'EOA' }) =>
+    apiRequest<{ challengeId: string }>('/circle/create-wallet', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };
 
 // --- Wallets (current user only; requires Circle user session) ---

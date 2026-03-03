@@ -16,6 +16,7 @@ type AuthState = {
   wallets: Wallet[];
   defaultWalletId: string | null;
   selectedWalletId: string | null;
+  selectedBlockchain: string;
   loading: boolean;
   error: string | null;
   initialCheckDone: boolean;
@@ -23,6 +24,8 @@ type AuthState = {
 
 type AuthContextValue = AuthState & {
   setSelectedWalletId: (id: string | null) => void;
+  setSelectedBlockchain: (blockchain: string) => void;
+  createWalletForBlockchain: (blockchain: string) => Promise<string | undefined>;
   loginWithGoogle: (idToken: string) => Promise<void>;
   startCircleWalletCreation: (options?: { forceRedirect?: boolean }) => Promise<void>;
   onCircleLoginComplete: (userToken: string, encryptionKey: string) => Promise<string | undefined>;
@@ -50,6 +53,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     wallets: [],
     defaultWalletId: null,
     selectedWalletId: null,
+    selectedBlockchain: 'ARC-TESTNET',
     loading: true,
     error: null,
     initialCheckDone: false,
@@ -76,11 +80,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
           s.selectedWalletId && wallets.some((w) => w.id === s.selectedWalletId)
             ? s.selectedWalletId
             : defaultId;
+        const selectedWallet = wallets.find((w) => w.id === selected);
+        const selectedBlockchain = selectedWallet?.blockchain ?? s.selectedBlockchain;
         return {
           ...s,
           wallets,
           defaultWalletId: defaultId,
           selectedWalletId: selected,
+          selectedBlockchain,
           error: null,
         };
       });
@@ -284,7 +291,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUserCredentials(userToken, encryptionKey);
         const result = await circleApi.initializeUser({
           userToken,
-          blockchains: BLOCKCHAINS,
+          // Initialize on a single default blockchain; additional chains are added later
+          // via createWalletForBlockchain to avoid Circle error 155508.
+          blockchains: [BLOCKCHAINS[0]],
           accountType: 'SCA',
         });
         await refreshUser();
@@ -311,15 +320,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
     async (challengeId: string) => {
       setState((s) => ({ ...s, loading: true, error: null }));
       try {
-        const { getCircleSdk, getStoredCredentials } = await import('../utils/circleSdk');
-        const creds = getStoredCredentials();
+        const { getCircleSdk, getStoredCredentials, setDeviceCredentials, getDeviceId } = await import('../utils/circleSdk');
         const appId = import.meta.env.VITE_CIRCLE_APP_ID;
         const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-        if (!creds?.deviceToken || !creds?.deviceEncryptionKey || !creds?.userToken || !creds?.encryptionKey || !appId || !googleClientId) {
+        if (!appId || !googleClientId) {
+          throw new Error('Missing Circle env (VITE_CIRCLE_APP_ID or VITE_GOOGLE_CLIENT_ID)');
+        }
+        let creds = getStoredCredentials();
+        if (!creds?.userToken || !creds?.encryptionKey) {
+          throw new Error('Missing Circle credentials or env');
+        }
+        if (!creds.deviceToken || !creds.deviceEncryptionKey) {
+          try {
+            const deviceId = await getDeviceId(appId);
+            const data = await circleApi.createDeviceToken(deviceId);
+            setDeviceCredentials(data.deviceToken, data.deviceEncryptionKey);
+            creds = getStoredCredentials();
+          } catch (e) {
+            throw new Error('Could not restore device credentials. Try logging out and back in.');
+          }
+        }
+        if (!creds?.deviceToken || !creds?.deviceEncryptionKey) {
           throw new Error('Missing Circle credentials or env');
         }
         const sdk = getCircleSdk(appId, googleClientId, creds.deviceToken, creds.deviceEncryptionKey);
-        sdk.setAuthentication({ userToken: creds.userToken, encryptionKey: creds.encryptionKey });
+        sdk.setAuthentication({ userToken: creds.userToken!, encryptionKey: creds.encryptionKey! });
         await new Promise<void>((resolve, reject) => {
           sdk.execute(challengeId, (err: unknown) => {
             if (err) reject(new Error((err as Error).message || 'Challenge failed'));
@@ -352,6 +377,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       wallets: [],
       defaultWalletId: null,
       selectedWalletId: null,
+      selectedBlockchain: 'ARC-TESTNET',
       loading: false,
       error: null,
       initialCheckDone: true,
@@ -368,10 +394,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setState((s) => ({ ...s, selectedWalletId: id }));
   }, []);
 
+  const setSelectedBlockchain = useCallback((blockchain: string) => {
+    setState((s) => ({ ...s, selectedBlockchain: blockchain }));
+  }, []);
+
+  /** Ensure user has a wallet on the given blockchain. If not, creates one and returns challengeId to execute. */
+  const createWalletForBlockchain = useCallback(async (blockchain: string): Promise<string | undefined> => {
+    const { wallets } = state;
+    if (wallets.some((w) => w.blockchain === blockchain)) return undefined;
+    const data = await circleApi.createWallet({
+      blockchains: [blockchain],
+      accountType: 'SCA',
+    });
+    return data?.challengeId;
+  }, [state.wallets]);
+
+  useEffect(() => {
+    const chain = state.selectedBlockchain;
+    const walletForChain = state.wallets.find((w) => w.blockchain === chain);
+    if (walletForChain && state.selectedWalletId !== walletForChain.id) {
+      setState((s) => ({ ...s, selectedWalletId: walletForChain.id }));
+    }
+  }, [state.selectedBlockchain, state.wallets, state.selectedWalletId]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       ...state,
       setSelectedWalletId,
+      setSelectedBlockchain,
+      createWalletForBlockchain,
       loginWithGoogle,
       startCircleWalletCreation,
       onCircleLoginComplete,
@@ -383,6 +434,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     [
       state,
       setSelectedWalletId,
+      setSelectedBlockchain,
+      createWalletForBlockchain,
       loginWithGoogle,
       startCircleWalletCreation,
       onCircleLoginComplete,

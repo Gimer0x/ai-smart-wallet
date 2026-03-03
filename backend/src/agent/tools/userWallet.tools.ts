@@ -5,6 +5,18 @@
 
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
+
+const EXPLORER_BASE: Record<string, string> = {
+  "ARC-TESTNET": "https://testnet.arcscan.app",
+  "BASE-SEPOLIA": "https://sepolia.basescan.org",
+  "ETH-SEPOLIA": "https://sepolia.etherscan.io",
+  "MATIC-AMOY": "https://amoy.polygonscan.com",
+};
+
+function getExplorerTxUrl(blockchain: string, txHash: string): string {
+  const base = EXPLORER_BASE[blockchain] ?? (blockchain.includes("BASE") ? EXPLORER_BASE["BASE-SEPOLIA"] : EXPLORER_BASE["ARC-TESTNET"]);
+  return `${base}/tx/${txHash}`;
+}
 import {
   getWalletBalance,
   getWallet,
@@ -98,14 +110,13 @@ export function createUserWalletTools(userToken: string) {
         );
         const rest = rawTransactions.slice(15) as TxWithHash[];
         const transactions = [...enriched, ...rest];
-        const ARC_EXPLORER = "https://testnet.arcscan.app/tx/";
 
         const list = transactions
           .map(
             (tx: { transactionType: string; amounts: string[]; blockchain: string; state: string; sourceAddress?: string; destinationAddress?: string; createDate: string; id: string; txHash?: string; symbol?: string; token?: { symbol?: string } }, i: number) => {
               const symbol = tx.symbol ?? tx.token?.symbol ?? "USDC";
               const hash = tx.txHash ?? (tx as { tx_hash?: string }).tx_hash;
-              const txLink = hash ? `\n   Explorer: transaction details\n   ${ARC_EXPLORER}${hash}` : "";
+              const txLink = hash ? `\n   Explorer: transaction details\n   ${getExplorerTxUrl(tx.blockchain, hash)}` : "";
               return `${i + 1}. ${tx.transactionType} - ${tx.amounts.join(", ")} ${symbol} on ${tx.blockchain}\n    State: ${tx.state}\n    From: ${tx.sourceAddress || "N/A"}\n    To: ${tx.destinationAddress || "N/A"}\n    Date: ${new Date(tx.createDate).toLocaleString()}\n    Transaction ID: ${tx.id}`;
             }
           )
@@ -130,7 +141,7 @@ export function createUserWalletTools(userToken: string) {
         const tx = res.data.transaction as { id: string; transactionType: string; state: string; blockchain: string; amounts: string[]; sourceAddress?: string; destinationAddress?: string; createDate: string; updateDate: string; walletId: string; txHash?: string; symbol?: string; token?: { symbol?: string } };
         const symbol = tx.symbol ?? tx.token?.symbol ?? "USDC";
         const txHash = tx.txHash
-          ? `\nTransaction Hash: ${tx.txHash}\nExplorer: transaction details\nhttps://testnet.arcscan.app/tx/${tx.txHash}`
+          ? `\nTransaction Hash: ${tx.txHash}\nExplorer: transaction details\n${getExplorerTxUrl(tx.blockchain, tx.txHash)}`
           : "";
         return `Transaction Details:
 ID: ${tx.id}

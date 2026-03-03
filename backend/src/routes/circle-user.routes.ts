@@ -6,9 +6,9 @@
  */
 
 import { Router, Request, Response } from "express";
-import { createDeviceToken, initializeUser } from "../circleUser/circleUserClient";
+import { createDeviceToken, initializeUser, createUserWallet } from "../circleUser/circleUserClient";
 import { getSession } from "../utils/getSession";
-import { requireAuth } from "../middleware/requireAuth";
+import { requireAuth, requireCircleUser } from "../middleware/requireAuth";
 
 const router = Router();
 
@@ -89,6 +89,45 @@ router.post("/initialize-user", requireAuth, async (req: Request, res: Response)
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Initialize user failed";
     console.error("Circle initialize-user error:", message);
+    res.status(500).json({ success: false, error: message });
+  }
+});
+
+/**
+ * POST /api/circle/create-wallet
+ * Body: { blockchains: string[], accountType? }. Requires Circle user session.
+ * Creates a wallet on the given blockchain(s) for the existing user; returns challengeId to execute in the app.
+ */
+router.post("/create-wallet", requireAuth, requireCircleUser, async (req: Request, res: Response) => {
+  try {
+    const { blockchains, accountType } = req.body;
+    if (!Array.isArray(blockchains) || blockchains.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "blockchains (non-empty array) is required",
+      });
+    }
+    const session = getSession(req);
+    const userToken = session.circleUserToken;
+    if (!userToken) {
+      return res.status(403).json({
+        success: false,
+        error: "Circle user not initialized",
+      });
+    }
+    const result = await createUserWallet(userToken, {
+      blockchains,
+      accountType: accountType === "SCA" ? "SCA" : "EOA",
+    });
+    return res.json({
+      success: true,
+      data: {
+        challengeId: result.data?.challengeId,
+      },
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Create wallet failed";
+    console.error("Circle create-wallet error:", message);
     res.status(500).json({ success: false, error: message });
   }
 });

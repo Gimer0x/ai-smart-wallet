@@ -7,6 +7,7 @@
 import type {
   CircleDeviceTokenResponse,
   CircleInitializeUserResponse,
+  CircleCreateUserWalletResponse,
   CircleListWalletsResponse,
   CircleWalletBalanceResponse,
   CircleGetWalletResponse,
@@ -98,6 +99,41 @@ export async function initializeUser(
   }
 
   return res.json() as Promise<CircleInitializeUserResponse>;
+}
+
+/**
+ * Create wallet(s) for an existing user on the given blockchains.
+ * Returns challengeId for the frontend to execute with Circle SDK.
+ */
+export async function createUserWallet(
+  userToken: string,
+  options: {
+    blockchains: string[];
+    accountType?: "SCA" | "EOA";
+  }
+): Promise<CircleCreateUserWalletResponse> {
+  const body = {
+    idempotencyKey: idempotencyKey(),
+    accountType: options.accountType ?? "SCA",
+    blockchains: options.blockchains,
+  };
+
+  const res = await fetch(`${CIRCLE_ARC_URL}/v1/w3s/user/wallets`, {
+    method: "POST",
+    headers: {
+      Authorization: getAuthHeader(),
+      "Content-Type": "application/json",
+      "X-User-Token": userToken,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Circle create user wallet failed: ${res.status} ${errText}`);
+  }
+
+  return res.json() as Promise<CircleCreateUserWalletResponse>;
 }
 
 /**

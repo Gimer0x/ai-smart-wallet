@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { walletApi } from '../services/api';
+import { getExplorerTxUrl } from '../utils/explorer';
 
 interface Transaction {
   id: string;
@@ -41,17 +42,6 @@ export function TransactionList({ walletId, transactionType }: TransactionListPr
     } finally {
       setLoading(false);
     }
-  };
-
-  const getExplorerUrl = (blockchain: string, txHash: string) => {
-    if (blockchain === 'BASE-SEPOLIA') {
-      return `https://testnet.arcscan.app/tx/${txHash}`;
-    } else if (blockchain.includes('MATIC')) {
-      return `https://amoy.polygonscan.com/tx/${txHash}`;
-    } else if (blockchain.includes('ETH')) {
-      return `https://sepolia.etherscan.io/tx/${txHash}`;
-    }
-    return null;
   };
 
   if (loading) {
@@ -142,7 +132,7 @@ export function TransactionList({ walletId, transactionType }: TransactionListPr
             {tx.txHash && (
               <div style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>
                 <a
-                  href={getExplorerUrl(tx.blockchain, tx.txHash) || '#'}
+                  href={getExplorerTxUrl(tx.blockchain, tx.txHash ?? '') ?? '#'}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ color: '#667eea', textDecoration: 'none' }}
