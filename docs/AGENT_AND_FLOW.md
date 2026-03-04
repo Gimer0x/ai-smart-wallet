@@ -91,8 +91,8 @@ Example: *"Send 2 USDC to 0x0d2Dc4E9ebc1465E86Fdf6ab18377CB82eCf7548"*
 
 - Agent receives the user message and system prompt (with `primaryWalletId` = active wallet).
 - Agent typically:
-  1. Calls `**check_wallet_balance`** with the active wallet ID to get USDC balance and **token ID**.
-  2. Calls `**transfer_tokens`** with: `walletId`, `tokenId` (from step 1), `destinationAddress`, `amount`, optional `feeLevel`.
+  1. Calls **`check_wallet_balance`** with the active wallet ID to get USDC balance and **token ID**.
+  2. Calls **`transfer_tokens`** with: `walletId`, `tokenId` (from step 1), `destinationAddress`, `amount`, optional `feeLevel`.
 - `transfer_tokens`:
   - Fetches balance again, verifies token and amount.
   - Builds `PendingAction`: `{ type: 'transfer', walletId, tokenId, destinationAddress, amount, feeLevel }`.
@@ -112,23 +112,23 @@ Example: *"Send 2 USDC to 0x0d2Dc4E9ebc1465E86Fdf6ab18377CB82eCf7548"*
 
 - Frontend: `handleSignPendingAction` runs.
   - Checks for Circle credentials (device + user tokens and encryption key in sessionStorage/cookies). If missing, shows “Sign in with Google to enable signing”.
-  - Calls `**walletApi.prepareTransfer(action.walletId, { tokenId, destinationAddress, amount, feeLevel })`**.
+  - Calls **`walletApi.prepareTransfer(action.walletId, { tokenId, destinationAddress, amount, feeLevel })`**.
 
 ### Step 6: Backend creates the real transfer challenge
 
 - `POST /api/wallets/:walletId/transfer` (e.g. `wallet.routes.ts`).
-- Backend checks the wallet belongs to the session user, then calls Circle: `**createTransferChallenge(userToken, { walletId, tokenId, destinationAddress, amount, feeLevel })`**.
-- Circle returns a `**challengeId**` (a one-time signing challenge). Backend responds with `{ challengeId, message }`. The transfer is still **not** executed; it is only prepared.
+- Backend checks the wallet belongs to the session user, then calls Circle: **`createTransferChallenge(userToken, { walletId, tokenId, destinationAddress, amount, feeLevel })`**.
+- Circle returns a **`challengeId**` (a one-time signing challenge). Backend responds with `{ challengeId, message }`. The transfer is still **not** executed; it is only prepared.
 
 ### Step 7: User signs in the browser
 
-- Frontend initializes the Circle Web SDK with stored credentials and calls `**sdk.execute(challengeId, callback)`**.
+- Frontend initializes the Circle Web SDK with stored credentials and calls **`sdk.execute(challengeId, callback)`**.
 - The SDK shows Circle’s signing UI; the user approves. Signing happens **in the browser** with the user’s key; the server never sees the signature or the encryption key.
 - On success, Circle executes the transfer onchain.
 
 ### Step 8: Frontend shows "Completed" and explorer link
 
-- Frontend sets the message state to “Confirming…” and polls `**walletApi.listTransactions(walletId, 'OUTBOUND')`** (and if needed `**getTransaction(latest.id)`** to get `txHash`).
+- Frontend sets the message state to “Confirming…” and polls **`walletApi.listTransactions(walletId, 'OUTBOUND')`** (and if needed **`getTransaction(latest.id)`** to get `txHash`).
 - When the new outbound transaction has a `txHash`, the message is updated to **Completed,** and a “View on explorer” link is shown (using the tx’s blockchain for the correct explorer).
 
 ---
