@@ -1,24 +1,68 @@
 import { useState, useRef, useEffect } from 'react';
-import { chatApi } from '../services/api';
+import { chatApi, walletApi, type PendingAction } from '../services/api';
+import { getExplorerTxUrl } from '../utils/explorer';
+import { getCircleSdk, getStoredCredentials } from '../utils/circleSdk';
+
+const CIRCLE_APP_ID = import.meta.env.VITE_CIRCLE_APP_ID;
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+/** Turn URLs in text into clickable links */
+function linkifyContent(text: string): React.ReactNode {
+  const urlRegex = /(https:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, i) =>
+    part.startsWith('https://') ? (
+      <a
+        key={i}
+        href={part}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: 'var(--primary)', textDecoration: 'underline', wordBreak: 'break-all' }}
+      >
+        {part}
+      </a>
+    ) : (
+      part
+    )
+  );
+}
 
 interface Message {
   id: string;
   role: 'user' | 'agent';
   content: string;
   timestamp: Date;
+  pendingAction?: PendingAction;
+  /** True while we wait for tx confirmation (hash) after user signed a transfer */
+  pendingConfirming?: boolean;
+  pendingCompleted?: boolean;
+  completedTxHash?: string;
+  completedBlockchain?: string;
 }
 
-export function ChatInterface() {
+interface ChatInterfaceProps {
+  /** Optional: use this wallet for chat; backend uses default if not provided */
+  walletId?: string;
+  onPendingComplete?: () => void;
+  /** When provided, shown when user tries to sign but user credentials are missing (enables "Sign in with Google to enable signing") */
+  onRequestSignIn?: () => void;
+}
+
+export function ChatInterface({ walletId, onPendingComplete, onRequestSignIn }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
       role: 'agent',
-      content: 'Hello! I\'m your smart wallet assistant. I can help you purchase e-books, check your balance, and manage your wallet. How can I help you today?',
+      content: 'Hello! I\'m your smart wallet assistant. I can help you check your balance, transfer tokens, and manage your wallet. How can I help you today?',
       timestamp: new Date(),
     },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [signingMessageId, setSigningMessageId] = useState<string | null>(null);
+  const [signError, setSignError] = useState<string | null>(null);
+  /** When set, this message's pending action failed due to missing user creds; show "Sign in with Google to enable signing" if onRequestSignIn provided */
+  const [signNeedsCredsMessageId, setSignNeedsCredsMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -47,8 +91,7 @@ export function ChatInterface() {
 
     try {
       console.log('Sending message to API:', messageToSend);
-      // Call the chat API
-      const response = await chatApi.sendMessage(messageToSend);
+      const response = await chatApi.sendMessage(messageToSend, walletId);
       console.log('Received response from API:', response);
       
       const agentMessage: Message = {
@@ -56,6 +99,7 @@ export function ChatInterface() {
         role: 'agent',
         content: response.response,
         timestamp: new Date(),
+        ...(response.pendingAction && { pendingAction: response.pendingAction }),
       };
       setMessages((prev) => [...prev, agentMessage]);
     } catch (error: any) {
@@ -68,6 +112,132 @@ export function ChatInterface() {
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSignPendingAction = async (messageId: string, action: PendingAction) => {
+    if (action.type !== 'transfer') return;
+    console.log('[Sign & send] Clicked', { messageId, action });
+    setSignError(null);
+    const creds = getStoredCredentials();
+    const hasDevice = !!(creds?.deviceToken && creds?.deviceEncryptionKey);
+    const hasUser = !!(creds?.userToken && creds?.encryptionKey);
+    const hasEnv = !!(CIRCLE_APP_ID && GOOGLE_CLIENT_ID);
+    console.log('[Sign & send] Credentials check', {
+      hasDeviceToken: !!creds?.deviceToken,
+      hasDeviceEncryptionKey: !!creds?.deviceEncryptionKey,
+      hasUserToken: !!creds?.userToken,
+      hasEncryptionKey: !!creds?.encryptionKey,
+      hasCircleAppId: !!CIRCLE_APP_ID,
+      hasGoogleClientId: !!GOOGLE_CLIENT_ID,
+      credsPresent: hasDevice && hasUser && hasEnv,
+    });
+    if (!creds?.deviceToken || !creds?.deviceEncryptionKey || !creds?.userToken || !creds?.encryptionKey || !CIRCLE_APP_ID || !GOOGLE_CLIENT_ID) {
+      const missing = [
+        !creds?.deviceToken && 'deviceToken',
+        !creds?.deviceEncryptionKey && 'deviceEncryptionKey',
+        !creds?.userToken && 'userToken',
+        !creds?.encryptionKey && 'encryptionKey',
+        !CIRCLE_APP_ID && 'VITE_CIRCLE_APP_ID',
+        !GOOGLE_CLIENT_ID && 'VITE_GOOGLE_CLIENT_ID',
+      ].filter(Boolean) as string[];
+      console.warn('[Sign & send] Missing credentials or env – aborting', { missing });
+      setSignError(
+        !creds?.userToken || !creds?.encryptionKey
+          ? 'Missing Circle credentials. Click "Sign in with Google to enable signing" below, or log out and sign in again.'
+          : 'Missing Circle credentials. Please sign in again.'
+      );
+      setSignNeedsCredsMessageId(messageId);
+      return;
+    }
+    setSignNeedsCredsMessageId(null);
+    setSigningMessageId(messageId);
+    setSignNeedsCredsMessageId(null);
+    try {
+      console.log('[Sign & send] Creating Circle SDK...');
+      const sdk = getCircleSdk(CIRCLE_APP_ID, GOOGLE_CLIENT_ID, creds.deviceToken, creds.deviceEncryptionKey);
+      sdk.setAuthentication({ userToken: creds.userToken, encryptionKey: creds.encryptionKey });
+      console.log('[Sign & send] SDK created and authentication set');
+      console.log('[Sign & send] Preparing transfer...', { walletId: action.walletId, amount: action.amount, destination: action.destinationAddress });
+      const { challengeId } = await walletApi.prepareTransfer(action.walletId, {
+        tokenId: action.tokenId,
+        destinationAddress: action.destinationAddress,
+        amount: action.amount,
+        feeLevel: action.feeLevel,
+      });
+      console.log('[Sign & send] Got challengeId, executing challenge...', { challengeId });
+      await new Promise<void>((resolve, reject) => {
+        sdk.execute(challengeId, (err: unknown) => {
+          if (err) {
+            console.error('[Sign & send] SDK execute error', err);
+            reject(new Error((err as Error).message || 'Signing failed'));
+          } else {
+            console.log('[Sign & send] Challenge completed successfully');
+            resolve();
+          }
+        });
+      });
+      // Wait for tx confirmation (hash) before showing "Completed"
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, pendingAction: undefined, pendingConfirming: true } : m))
+      );
+      const maxAttempts = 12;
+      const pollForTxHash = async (attempt = 0) => {
+        const delayMs = attempt === 0 ? 0 : 2000;
+        if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
+        try {
+          const txList = await walletApi.listTransactions(action.walletId, 'OUTBOUND');
+          const sorted = (txList || []).slice().sort((a: { createDate: string }, b: { createDate: string }) =>
+            new Date(b.createDate).getTime() - new Date(a.createDate).getTime()
+          );
+          const latest = sorted[0];
+          let txHash: string | undefined = latest?.txHash;
+          let blockchain: string | undefined = latest?.blockchain;
+          if (latest?.id && txHash == null) {
+            try {
+              const full = await walletApi.getTransaction(latest.id);
+              txHash = full?.txHash ?? full?.tx_hash;
+              if (blockchain == null) blockchain = full?.blockchain;
+            } catch {
+              // ignore
+            }
+          }
+          if (txHash) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === messageId
+                  ? {
+                      ...m,
+                      pendingConfirming: false,
+                      pendingCompleted: true,
+                      completedTxHash: txHash,
+                      completedBlockchain: blockchain ?? undefined,
+                    }
+                  : m
+              )
+            );
+            onPendingComplete?.();
+            return;
+          }
+        } catch {
+          // ignore
+        }
+        if (attempt < maxAttempts - 1) {
+          pollForTxHash(attempt + 1);
+        } else {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === messageId ? { ...m, pendingConfirming: false, pendingCompleted: true } : m))
+          );
+          onPendingComplete?.();
+        }
+      };
+      pollForTxHash();
+    } catch (e) {
+      console.error('[Sign & send] Error', e);
+      setSignError(e instanceof Error ? e.message : 'Signing failed');
+    } finally {
+      setSigningMessageId(null);
+      console.log('[Sign & send] Flow finished');
     }
   };
 
@@ -159,22 +329,105 @@ export function ChatInterface() {
                   AI
                 </div>
               )}
-              <div
-                style={{
-                  maxWidth: '85%',
-                  padding: message.role === 'user' ? '0.75rem 1rem' : '1rem 1.25rem',
-                  borderRadius: message.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                  backgroundColor: message.role === 'user' ? 'var(--primary)' : '#f8f9fa',
-                  color: message.role === 'user' ? 'white' : 'var(--secondary)',
-                  wordWrap: 'break-word',
-                  fontSize: '0.9375rem',
-                  lineHeight: '1.5',
-                  boxShadow: message.role === 'user' 
-                    ? '0 1px 2px rgba(99, 102, 241, 0.2)' 
-                    : '0 1px 2px rgba(0, 0, 0, 0.05)',
-                }}
-              >
-                <div style={{ whiteSpace: 'pre-wrap' }}>{message.content}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxWidth: '85%' }}>
+                <div
+                  style={{
+                    padding: message.role === 'user' ? '0.75rem 1rem' : '1rem 1.25rem',
+                    borderRadius: message.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                    backgroundColor: message.role === 'user' ? 'var(--primary)' : '#f8f9fa',
+                    color: message.role === 'user' ? 'white' : 'var(--secondary)',
+                    wordWrap: 'break-word',
+                    fontSize: '0.9375rem',
+                    lineHeight: '1.5',
+                    boxShadow: message.role === 'user' ? '0 1px 2px rgba(99, 102, 241, 0.2)' : '0 1px 2px rgba(0, 0, 0, 0.05)',
+                  }}
+                >
+                  <div style={{ whiteSpace: 'pre-wrap' }}>{linkifyContent(message.content)}</div>
+                </div>
+                {message.role === 'agent' && message.pendingConfirming && (
+                  <div
+                    style={{
+                      padding: '0.75rem 1rem',
+                      borderRadius: '8px',
+                      border: '1px solid var(--primary)',
+                      background: 'rgba(99, 102, 241, 0.06)',
+                      fontSize: '0.875rem',
+                      color: 'var(--secondary)',
+                    }}
+                  >
+                    Confirming transaction…
+                  </div>
+                )}
+                {message.role === 'agent' && message.pendingAction?.type === 'transfer' && !message.pendingCompleted && !message.pendingConfirming && (
+                  <div
+                    style={{
+                      padding: '0.75rem 1rem',
+                      borderRadius: '8px',
+                      border: '1px solid var(--primary)',
+                      background: 'rgba(99, 102, 241, 0.06)',
+                      fontSize: '0.875rem',
+                    }}
+                  >
+                    <span>
+                      Send {message.pendingAction.amount} USDC to {message.pendingAction.destinationAddress.slice(0, 10)}…
+                    </span>
+                    <div style={{ marginTop: '0.5rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
+                      <button
+                        type="button"
+                        disabled={signingMessageId === message.id}
+                        onClick={() => handleSignPendingAction(message.id, message.pendingAction!)}
+                        style={{
+                          padding: '0.4rem 0.75rem',
+                          background: 'var(--primary)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '0.8rem',
+                          cursor: signingMessageId === message.id ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {signingMessageId === message.id ? 'Opening…' : 'Sign & send'}
+                      </button>
+                      {signError && (signingMessageId === message.id || signNeedsCredsMessageId === message.id) && (
+                        <span style={{ color: '#c33', fontSize: '0.75rem' }}>{signError}</span>
+                      )}
+                      {signNeedsCredsMessageId === message.id && onRequestSignIn && (
+                        <button
+                          type="button"
+                          onClick={onRequestSignIn}
+                          style={{
+                            padding: '0.4rem 0.75rem',
+                            background: 'transparent',
+                            color: 'var(--primary)',
+                            border: '1px solid var(--primary)',
+                            borderRadius: '6px',
+                            fontSize: '0.8rem',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Sign in with Google to enable signing
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {message.role === 'agent' && message.pendingCompleted && (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 500 }}>
+                    <div>✓ Completed</div>
+                    {message.completedTxHash && (
+                      <div style={{ marginTop: '4px', fontSize: '0.75rem', color: 'var(--secondary)', fontWeight: 400 }}>
+                        <a
+                          href={getExplorerTxUrl(message.completedBlockchain ?? 'ARC-TESTNET', message.completedTxHash) ?? '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: 'var(--primary)', textDecoration: 'underline', wordBreak: 'break-all' }}
+                        >
+                          View on explorer: {message.completedTxHash.substring(0, 10)}…{message.completedTxHash.slice(-8)}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               {message.role === 'user' && (
                 <div

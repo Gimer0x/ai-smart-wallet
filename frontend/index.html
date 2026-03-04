@@ -8,6 +8,17 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Suppress Datadog RUM warning from third-party deps (e.g. Circle SDK) that bundle it but don't configure it
+      (function () {
+        var w = console.warn;
+        if (typeof w !== 'function') return;
+        console.warn = function () {
+          if (arguments[0] && String(arguments[0]).indexOf('Datadog') !== -1 && String(arguments[0]).indexOf('Application ID') !== -1) return;
+          return w.apply(console, arguments);
+        };
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

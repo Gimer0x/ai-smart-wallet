@@ -1,14 +1,62 @@
+import type { Wallet } from '../services/api';
+import type { MeData } from '../services/api';
+import { BLOCKCHAINS } from '../context/AuthContext';
+
 interface SidebarProps {
   isOpen: boolean;
   onNavigate: (view: string) => void;
   currentView: string;
   selectedWalletId: string | null;
+  selectedBlockchain: string;
+  setSelectedBlockchain: (blockchain: string) => void;
+  createWalletForBlockchain: (blockchain: string) => Promise<string | undefined>;
+  executeChallengeAndFinish: (challengeId: string) => Promise<void>;
+  wallets: Wallet[];
+  onSelectWallet?: (walletId: string) => void;
+  user: MeData | null;
+  hasWallet: boolean;
+  needsWallet: boolean;
+  onLogout?: () => void;
+  onCreateWallet?: () => void;
 }
 
-export function Sidebar({ isOpen, onNavigate, currentView, selectedWalletId }: SidebarProps) {
+export function Sidebar({
+  isOpen,
+  onNavigate,
+  currentView,
+  selectedWalletId,
+  selectedBlockchain,
+  setSelectedBlockchain,
+  createWalletForBlockchain,
+  executeChallengeAndFinish,
+  wallets,
+  onSelectWallet,
+  user,
+  hasWallet,
+  needsWallet,
+  onLogout,
+  onCreateWallet,
+}: SidebarProps) {
+  const handleBlockchainChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const chain = e.target.value;
+    setSelectedBlockchain(chain);
+    const walletForChain = wallets.find((w) => w.blockchain === chain);
+    if (walletForChain) {
+      onSelectWallet?.(walletForChain.id);
+      return;
+    }
+    try {
+      const challengeId = await createWalletForBlockchain(chain);
+      if (challengeId) {
+        await executeChallengeAndFinish(challengeId);
+      }
+    } catch (err) {
+      console.error('Create wallet for blockchain failed:', err);
+    }
+  };
+
   return (
     <>
-      {/* Sidebar */}
       <div
         className={`sidebar ${isOpen ? 'sidebar-open' : 'sidebar-closed'}`}
         style={{
@@ -27,22 +75,42 @@ export function Sidebar({ isOpen, onNavigate, currentView, selectedWalletId }: S
         <div style={{ padding: '1.5rem' }}>
           <div style={{ marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.125rem', marginBottom: '0.5rem' }}>
-              <div style={{ fontSize: '0.875rem', color: 'white', fontWeight: 500, lineHeight: 1.4 }}>
-                Wallet
-              </div>
-              <div style={{ fontSize: '0.875rem', color: 'white', fontWeight: 500, lineHeight: 1.4 }}>
-                Integrated
-              </div>
-              <div style={{ fontSize: '0.875rem', color: 'white', fontWeight: 500, lineHeight: 1.4 }}>
-                AI
-              </div>
+              <div style={{ fontSize: '1.0rem', color: 'white', fontWeight: 500, lineHeight: 1.4 }}>Multisig AI Wallet</div>
+              
             </div>
-            <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', margin: '0.5rem 0 0 0', fontWeight: 400 }}>
-              {currentView === 'chat' ? 'Chat with your smart wallet' : currentView === 'marketplace' ? 'Browse e-books' : 'Dashboard'}
+            <p style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.7)', margin: '0.5rem 0 0 0', fontWeight: 400 }}>
+              Chat with your smart wallet
             </p>
+            {user?.email && (
+              <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.6)', margin: '0.75rem 0 0 0', fontWeight: 400, wordBreak: 'break-all' }}>
+                {user.email}
+              </p>
+            )}
           </div>
 
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <select
+              value={selectedBlockchain}
+              onChange={handleBlockchainChange}
+              style={{
+                padding: '0.5rem 0.75rem',
+                borderRadius: '8px',
+                border: '1px solid rgba(255,255,255,0.2)',
+                background: 'rgba(255,255,255,0.08)',
+                color: 'white',
+                fontSize: '0.875rem',
+                width: '100%',
+                marginBottom: '0.25rem',
+                cursor: 'pointer',
+              }}
+              aria-label="Blockchain"
+            >
+              {BLOCKCHAINS.map((chain) => (
+                <option key={chain} value={chain} style={{ background: '#1e293b', color: 'white' }}>
+                  {chain}
+                </option>
+              ))}
+            </select>
             <button
               onClick={() => onNavigate('chat')}
               className={`nav-button ${currentView === 'chat' ? 'nav-active' : ''}`}
@@ -63,53 +131,85 @@ export function Sidebar({ isOpen, onNavigate, currentView, selectedWalletId }: S
               Chat
             </button>
 
-            <button
-              onClick={() => onNavigate('marketplace')}
-              className={`nav-button ${currentView === 'marketplace' ? 'nav-active' : ''}`}
-              style={{
-                padding: '0.75rem 1rem',
-                background: currentView === 'marketplace' ? 'var(--primary)' : 'transparent',
-                border: 'none',
-                borderRadius: '8px',
-                color: currentView === 'marketplace' ? 'white' : 'rgba(255,255,255,0.8)',
-                textAlign: 'left',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                fontSize: '0.875rem',
-                fontWeight: currentView === 'marketplace' ? 500 : 400,
-                width: '100%',
-              }}
-            >
-              Marketplace
-            </button>
+            {wallets.length > 0 && (
+              <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem', paddingLeft: '0.25rem' }}>
+                  Your wallets
+                </div>
+                {wallets.slice(0, 5).map((w) => (
+                  <button
+                    key={w.id}
+                    type="button"
+                    onClick={() => onSelectWallet?.(w.id)}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      padding: '0.5rem 0.75rem',
+                      marginBottom: '0.25rem',
+                      textAlign: 'left',
+                      border: 'none',
+                      borderRadius: '6px',
+                      background: selectedWalletId === w.id ? 'rgba(255,255,255,0.15)' : 'transparent',
+                      color: 'rgba(255,255,255,0.9)',
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span style={{ display: 'block' }}>{w.blockchain}</span>
+                    <span style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.75)' }}>
+                      {w.address.slice(0, 12)}…{w.address.slice(-14)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
 
-            <button
-              onClick={() => onNavigate('wallets')}
-              className={`nav-button ${currentView === 'wallets' ? 'nav-active' : ''}`}
-              style={{
-                padding: '0.75rem 1rem',
-                background: currentView === 'wallets' ? 'var(--primary)' : 'transparent',
-                border: 'none',
-                borderRadius: '8px',
-                color: currentView === 'wallets' ? 'white' : 'rgba(255,255,255,0.8)',
-                textAlign: 'left',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                fontSize: '0.875rem',
-                fontWeight: currentView === 'wallets' ? 500 : 400,
-                width: '100%',
-              }}
-            >
-              Wallets
-            </button>
+            {needsWallet && user && onCreateWallet && (
+              <button
+                type="button"
+                onClick={onCreateWallet}
+                style={{
+                  marginTop: '1rem',
+                  padding: '0.5rem 1rem',
+                  width: '100%',
+                  border: 'none',
+                  borderRadius: '8px',
+                  background: 'var(--primary)',
+                  color: 'white',
+                  fontSize: '0.875rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Create wallet
+              </button>
+            )}
 
-            {selectedWalletId && (
+            {user && onLogout && (
+              <button
+                type="button"
+                onClick={onLogout}
+                style={{
+                  marginTop: '1.5rem',
+                  padding: '0.5rem 1rem',
+                  width: '100%',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: '8px',
+                  background: 'transparent',
+                  color: 'rgba(255,255,255,0.9)',
+                  fontSize: '0.875rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Log out
+              </button>
+            )}
+
+            {selectedWalletId && hasWallet && (
               <>
                 <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
                   <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem', paddingLeft: '1rem' }}>
                     Wallet Details
                   </div>
-                  
                   <button
                     onClick={() => onNavigate('balance')}
                     className={`nav-button ${currentView === 'balance' ? 'nav-active' : ''}`}
@@ -129,7 +229,6 @@ export function Sidebar({ isOpen, onNavigate, currentView, selectedWalletId }: S
                   >
                     Balance
                   </button>
-
                   <button
                     onClick={() => onNavigate('transactions')}
                     className={`nav-button ${currentView === 'transactions' ? 'nav-active' : ''}`}
@@ -149,7 +248,6 @@ export function Sidebar({ isOpen, onNavigate, currentView, selectedWalletId }: S
                   >
                     Transactions
                   </button>
-
                   <button
                     onClick={() => onNavigate('transfer')}
                     className={`nav-button ${currentView === 'transfer' ? 'nav-active' : ''}`}
@@ -174,7 +272,7 @@ export function Sidebar({ isOpen, onNavigate, currentView, selectedWalletId }: S
             )}
           </nav>
 
-          {selectedWalletId && (
+          {selectedWalletId && hasWallet && (
             <div style={{ marginTop: '2rem', padding: '1rem', backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: '6px', fontSize: '0.75rem' }}>
               <div style={{ color: 'rgba(255,255,255,0.7)', marginBottom: '0.5rem', fontWeight: 500 }}>Selected Wallet</div>
               <div style={{ wordBreak: 'break-all', fontSize: '0.7rem', color: 'rgba(255,255,255,0.9)' }}>{selectedWalletId.substring(0, 24)}...</div>
