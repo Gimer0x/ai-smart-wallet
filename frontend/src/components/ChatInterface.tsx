@@ -181,7 +181,7 @@ export function ChatInterface({ walletId, onPendingComplete, onRequestSignIn }: 
       setMessages((prev) =>
         prev.map((m) => (m.id === messageId ? { ...m, pendingAction: undefined, pendingConfirming: true } : m))
       );
-      const maxAttempts = 8;
+      const maxAttempts = 12;
       const pollForTxHash = async (attempt = 0) => {
         const delayMs = attempt === 0 ? 0 : 2000;
         if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
@@ -191,7 +191,18 @@ export function ChatInterface({ walletId, onPendingComplete, onRequestSignIn }: 
             new Date(b.createDate).getTime() - new Date(a.createDate).getTime()
           );
           const latest = sorted[0];
-          if (latest?.txHash) {
+          let txHash: string | undefined = latest?.txHash;
+          let blockchain: string | undefined = latest?.blockchain;
+          if (latest?.id && txHash == null) {
+            try {
+              const full = await walletApi.getTransaction(latest.id);
+              txHash = full?.txHash ?? full?.tx_hash;
+              if (blockchain == null) blockchain = full?.blockchain;
+            } catch {
+              // ignore
+            }
+          }
+          if (txHash) {
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === messageId
@@ -199,8 +210,8 @@ export function ChatInterface({ walletId, onPendingComplete, onRequestSignIn }: 
                       ...m,
                       pendingConfirming: false,
                       pendingCompleted: true,
-                      completedTxHash: latest.txHash,
-                      completedBlockchain: latest.blockchain,
+                      completedTxHash: txHash,
+                      completedBlockchain: blockchain ?? undefined,
                     }
                   : m
               )
